@@ -1,0 +1,60 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    env:
+      AZURE_ENV_NAME: ${{ vars.AZURE_ENV_NAME }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install azd
+        uses: Azure/setup-azd@v2
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Log in with Azure (federated credentials)
+        if: ${{ vars.AZURE_CLIENT_ID != '' }}
+        run: |
+          azd auth login `
+            --client-id "${{ vars.AZURE_CLIENT_ID }}" `
+            --federated-credential-provider "github" `
+            --tenant-id "${{ vars.AZURE_TENANT_ID }}"
+        shell: pwsh
+
+      - name: Log in with Azure (client credentials)
+        if: ${{ vars.AZURE_CLIENT_ID == '' }}
+        run: |
+          azd auth login \
+            --client-id "${{ secrets.AZURE_CLIENT_ID }}" \
+            --client-secret "${{ secrets.AZURE_CLIENT_SECRET }}" \
+            --tenant-id "${{ secrets.AZURE_TENANT_ID }}"
+        shell: bash
+
+      - name: Provision and deploy
+        run: azd up --no-prompt
+        env:
+          ENTRAID_TENANT_ID: ${{ secrets.ENTRAID_TENANT_ID }}
+          OBO_CLIENT_ID: ${{ secrets.OBO_CLIENT_ID }}
+          OBO_CLIENT_SECRET: ${{ secrets.OBO_CLIENT_SECRET }}
+          APIM_PUBLISHER_EMAIL: ${{ vars.APIM_PUBLISHER_EMAIL }}
+          APIM_PUBLISHER_NAME: ${{ vars.APIM_PUBLISHER_NAME }}

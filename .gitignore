@@ -1,0 +1,30 @@
+## Build artifacts
+**/bin/
+**/obj/
+
+## .NET
+*.user
+*.suo
+*.cache
+*.vs/
+
+## Azure Functions
+local.settings.json
+
+## Environment files
+.env
+.env.*
+*.env
+
+## azd
+.azure/
+
+## OS files
+.DS_Store
+Thumbs.db
+
+## IDE
+.idea/
+.vscode/
+*.swp
+*.swo
