@@ -33,22 +33,12 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Log in with Azure (federated credentials)
-        if: ${{ vars.AZURE_CLIENT_ID != '' }}
         run: |
           azd auth login `
             --client-id "${{ vars.AZURE_CLIENT_ID }}" `
             --federated-credential-provider "github" `
             --tenant-id "${{ vars.AZURE_TENANT_ID }}"
         shell: pwsh
-
-      - name: Log in with Azure (client credentials)
-        if: ${{ vars.AZURE_CLIENT_ID == '' }}
-        run: |
-          azd auth login \
-            --client-id "${{ secrets.AZURE_CLIENT_ID }}" \
-            --client-secret "${{ secrets.AZURE_CLIENT_SECRET }}" \
-            --tenant-id "${{ secrets.AZURE_TENANT_ID }}"
-        shell: bash
 
       - name: Provision and deploy
         run: azd up --no-prompt
