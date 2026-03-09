@@ -7,112 +7,156 @@ param functionAppName string
 @description('Default hostname of the Function App')
 param functionAppDefaultHostname string
 
-resource apim 'Microsoft.ApiManagement/service@2023-05-01-preview' existing = {
+@description('MCP API path served via APIM')
+param mcpApiPath string = 'obo-mcp-server'
+
+resource apim 'Microsoft.ApiManagement/service@2024-06-01-preview' existing = {
   name: apimName
+}
+
+// ──────────────────────────────────────────────────────
+// Named Values for MCP configuration
+// ──────────────────────────────────────────────────────
+resource apimGatewayUrlNamedValue 'Microsoft.ApiManagement/service/namedValues@2024-06-01-preview' = {
+  parent: apim
+  name: 'APIMGatewayURL'
+  properties: {
+    displayName: 'APIMGatewayURL'
+    value: apim.properties.gatewayUrl
+    secret: false
+  }
+}
+
+resource mcpApiPathNamedValue 'Microsoft.ApiManagement/service/namedValues@2024-06-01-preview' = {
+  parent: apim
+  name: 'McpApiPath'
+  properties: {
+    displayName: 'McpApiPath'
+    value: mcpApiPath
+    secret: false
+  }
 }
 
 // ──────────────────────────────────────────────────────
 // Backend: Function App
 // ──────────────────────────────────────────────────────
-resource functionAppBackend 'Microsoft.ApiManagement/service/backends@2023-05-01-preview' = {
+resource functionAppBackend 'Microsoft.ApiManagement/service/backends@2024-06-01-preview' = {
   parent: apim
   name: 'function-app-backend'
   properties: {
     protocol: 'http'
     url: 'https://${functionAppDefaultHostname}/api'
-    resourceId: '${environment().resourceManager}${resourceId('Microsoft.Web/sites', functionAppName)}'
+    tls: {
+      validateCertificateChain: true
+      validateCertificateName: true
+    }
+    type: 'Single'
   }
 }
 
 // ──────────────────────────────────────────────────────
-// API 1: OBO MCP Server (Function App API)
+// API 1: OBO MCP Server — type 'mcp' with streamable transport
 // ──────────────────────────────────────────────────────
-resource oboMcpServerApi 'Microsoft.ApiManagement/service/apis@2023-05-01-preview' = {
+resource oboMcpServerApi 'Microsoft.ApiManagement/service/apis@2024-06-01-preview' = {
   parent: apim
   name: 'obo-mcp-server'
   properties: {
     displayName: 'OBO MCP Server'
     description: 'Function App API with Echo and GetMe endpoints, exposed as MCP server'
-    path: 'obo-mcp-server'
+    type: 'mcp'
+    subscriptionRequired: false
+    backendId: functionAppBackend.name
+    path: '/${mcpApiPath}'
     protocols: [
       'https'
     ]
-    subscriptionRequired: false
-    format: 'openapi+json'
-    value: loadTextContent('../../src/FunctionApp/openapi.json')
-    serviceUrl: 'https://${functionAppDefaultHostname}/api'
+    mcpProperties: {
+      transportType: 'streamable'
+    }
+    authenticationSettings: {
+      oAuth2AuthenticationSettings: []
+      openidAuthenticationSettings: []
+    }
+    isCurrent: true
   }
 }
 
-// Set backend policy for the API
-resource oboMcpServerApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2023-05-01-preview' = {
+// API-level policy: validate Azure AD token + return 401 with PRM link on failure
+resource oboMcpServerApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-06-01-preview' = {
   parent: oboMcpServerApi
   name: 'policy'
   properties: {
     format: 'rawxml'
-    value: '<policies><inbound><base /><set-backend-service backend-id="${functionAppBackend.name}" /></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+    value: loadTextContent('../policies/mcp-api-policy.xml')
   }
+  dependsOn: [
+    apimGatewayUrlNamedValue
+    mcpApiPathNamedValue
+  ]
 }
 
-// Operation-level policy for GetMe (OBO token exchange)
-resource getMeOperation 'Microsoft.ApiManagement/service/apis/operations@2023-05-01-preview' existing = {
+// PRM endpoint within the MCP API itself
+resource mcpPrmOperation 'Microsoft.ApiManagement/service/apis/operations@2024-06-01-preview' = {
   parent: oboMcpServerApi
-  name: 'getMe'
-}
-
-resource getMeOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2023-05-01-preview' = {
-  parent: getMeOperation
-  name: 'policy'
+  name: 'mcp-prm-operation'
   properties: {
-    format: 'rawxml'
-    value: loadTextContent('../policies/obo-getme-policy.xml')
-  }
-}
-
-// ──────────────────────────────────────────────────────
-// API 2: MCP Auth (Protected Resource Metadata)
-// ──────────────────────────────────────────────────────
-resource mcpAuthApi 'Microsoft.ApiManagement/service/apis@2023-05-01-preview' = {
-  parent: apim
-  name: 'mcp-auth'
-  properties: {
-    displayName: 'MCP Auth'
-    description: 'Protected Resource Metadata endpoint for MCP OAuth2 discovery'
-    path: 'mcp-auth'
-    protocols: [
-      'https'
-    ]
-    subscriptionRequired: false
-  }
-}
-
-resource mcpAuthOperation 'Microsoft.ApiManagement/service/apis/operations@2023-05-01-preview' = {
-  parent: mcpAuthApi
-  name: 'get-prm'
-  properties: {
-    displayName: 'Get Protected Resource Metadata'
+    displayName: 'Protected Resource Metadata'
     method: 'GET'
     urlTemplate: '/.well-known/oauth-protected-resource'
-    description: 'Returns the OAuth 2.0 Protected Resource Metadata for MCP server discovery'
-    responses: [
-      {
-        statusCode: 200
-        description: 'Protected Resource Metadata JSON'
-        representations: [
-          {
-            contentType: 'application/json'
-          }
-        ]
-      }
+    description: 'Protected Resource Metadata endpoint (RFC 9728)'
+  }
+}
+
+resource mcpPrmOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2024-06-01-preview' = {
+  parent: mcpPrmOperation
+  name: 'policy'
+  properties: {
+    format: 'rawxml'
+    value: loadTextContent('../policies/mcp-prm-policy.xml')
+  }
+  dependsOn: [
+    apimGatewayUrlNamedValue
+    mcpApiPathNamedValue
+  ]
+}
+
+// ──────────────────────────────────────────────────────
+// API 2: Dynamic Discovery — /.well-known/oauth-protected-resource
+// ──────────────────────────────────────────────────────
+resource dynamicDiscoveryApi 'Microsoft.ApiManagement/service/apis@2024-06-01-preview' = {
+  parent: apim
+  name: 'mcp-prm-dynamic-discovery'
+  properties: {
+    displayName: 'Dynamic Discovery Endpoint'
+    description: 'Model Context Protocol Dynamic Discovery Endpoint'
+    subscriptionRequired: false
+    path: '/.well-known/oauth-protected-resource'
+    protocols: [
+      'https'
     ]
   }
 }
 
-resource mcpAuthOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2023-05-01-preview' = {
-  parent: mcpAuthOperation
+resource mcpPrmDiscoveryOperation 'Microsoft.ApiManagement/service/apis/operations@2024-06-01-preview' = {
+  parent: dynamicDiscoveryApi
+  name: 'mcp-prm-discovery-operation'
+  properties: {
+    displayName: 'Protected Resource Metadata'
+    method: 'GET'
+    urlTemplate: '/${mcpApiPath}'
+    description: 'Protected Resource Metadata endpoint (RFC 9728)'
+  }
+}
+
+resource mcpPrmGlobalPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2024-06-01-preview' = {
+  parent: mcpPrmDiscoveryOperation
   name: 'policy'
   properties: {
     format: 'rawxml'
-    value: loadTextContent('../policies/mcp-auth-policy.xml')
+    value: loadTextContent('../policies/mcp-prm-policy.xml')
   }
+  dependsOn: [
+    apimGatewayUrlNamedValue
+    mcpApiPathNamedValue
+  ]
 }

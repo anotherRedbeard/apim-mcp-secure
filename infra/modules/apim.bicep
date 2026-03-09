@@ -28,7 +28,7 @@ param oboClientSecret string
 
 var apimName = '${abbrs.apiManagementService}${resourceToken}'
 
-resource apim 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
+resource apim 'Microsoft.ApiManagement/service@2024-06-01-preview' = {
   name: apimName
   location: location
   tags: tags
@@ -43,7 +43,7 @@ resource apim 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
 }
 
 // Named values for OBO token exchange
-resource namedValueTenantId 'Microsoft.ApiManagement/service/namedValues@2023-05-01-preview' = {
+resource namedValueTenantId 'Microsoft.ApiManagement/service/namedValues@2024-06-01-preview' = {
   parent: apim
   name: 'entraid-tenant'
   properties: {
@@ -53,7 +53,7 @@ resource namedValueTenantId 'Microsoft.ApiManagement/service/namedValues@2023-05
   }
 }
 
-resource namedValueClientId 'Microsoft.ApiManagement/service/namedValues@2023-05-01-preview' = {
+resource namedValueClientId 'Microsoft.ApiManagement/service/namedValues@2024-06-01-preview' = {
   parent: apim
   name: 'obo-client-id'
   properties: {
@@ -63,7 +63,7 @@ resource namedValueClientId 'Microsoft.ApiManagement/service/namedValues@2023-05
   }
 }
 
-resource namedValueClientSecret 'Microsoft.ApiManagement/service/namedValues@2023-05-01-preview' = {
+resource namedValueClientSecret 'Microsoft.ApiManagement/service/namedValues@2024-06-01-preview' = {
   parent: apim
   name: 'obo-client-secret'
   properties: {
