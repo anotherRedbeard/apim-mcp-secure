@@ -177,4 +177,3 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
 
 output functionAppName string = functionApp.name
 output functionAppDefaultHostname string = functionApp.properties.defaultHostName
-output functionAppDefaultKey string = listKeys('${functionApp.id}/host/default', '2024-04-01').functionKeys.default

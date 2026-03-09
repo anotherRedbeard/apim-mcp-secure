@@ -7,10 +7,6 @@ param functionAppName string
 @description('Default hostname of the Function App')
 param functionAppDefaultHostname string
 
-@description('Function App host key for backend auth')
-@secure()
-param functionAppKey string
-
 resource apim 'Microsoft.ApiManagement/service@2023-05-01-preview' existing = {
   name: apimName
 }
@@ -24,13 +20,6 @@ resource functionAppBackend 'Microsoft.ApiManagement/service/backends@2023-05-01
   properties: {
     protocol: 'http'
     url: 'https://${functionAppDefaultHostname}/api'
-    credentials: {
-      header: {
-        'x-functions-key': [
-          functionAppKey
-        ]
-      }
-    }
     resourceId: '${environment().resourceManager}${resourceId('Microsoft.Web/sites', functionAppName)}'
   }
 }

@@ -71,7 +71,6 @@ module apimApis './modules/apim-apis.bicep' = {
     apimName: apim.outputs.apimName
     functionAppName: functionApp.outputs.functionAppName
     functionAppDefaultHostname: functionApp.outputs.functionAppDefaultHostname
-    functionAppKey: functionApp.outputs.functionAppDefaultKey
   }
 }
 
