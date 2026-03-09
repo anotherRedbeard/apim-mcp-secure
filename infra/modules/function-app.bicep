@@ -170,7 +170,6 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
       AzureWebJobsStorage__credential: 'managedidentity'
       AzureWebJobsStorage__clientId: managedIdentity.properties.clientId
       FUNCTIONS_EXTENSION_VERSION: '~4'
-      SCM_DO_BUILD_DURING_DEPLOYMENT: 'true'
     }
   }
 }
