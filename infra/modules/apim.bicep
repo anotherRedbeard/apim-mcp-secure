@@ -33,8 +33,8 @@ resource apim 'Microsoft.ApiManagement/service@2023-05-01-preview' = {
   location: location
   tags: tags
   sku: {
-    name: 'Consumption'
-    capacity: 0
+    name: 'Basicv2'
+    capacity: 1
   }
   properties: {
     publisherEmail: publisherEmail
