@@ -29,6 +29,20 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   }
 }
 
+// Pre-create the file service and content share so the Function App doesn't need to
+resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2023-01-01' = {
+  parent: storageAccount
+  name: 'default'
+}
+
+resource contentShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-01-01' = {
+  parent: fileService
+  name: toLower(functionAppName)
+  properties: {
+    shareQuota: 5120
+  }
+}
+
 // Role assignment: Storage Blob Data Owner for the Function App managed identity
 resource storageBlobDataOwnerRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(storageAccount.id, functionApp.id, 'b7e6dc6d-f1e8-4753-8033-0f276bb0955b')
@@ -86,6 +100,9 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
   identity: {
     type: 'SystemAssigned'
   }
+  dependsOn: [
+    contentShare
+  ]
   properties: {
     serverFarmId: appServicePlan.id
     httpsOnly: true
