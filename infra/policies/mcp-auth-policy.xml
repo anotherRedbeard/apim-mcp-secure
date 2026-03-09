@@ -9,7 +9,7 @@
                 <value>public, max-age=3600</value>
             </set-header>
             <set-body>@{
-                var gatewayUrl = context.Deployment.ServiceUrl;
+                var gatewayUrl = context.Request.OriginalUrl.Scheme + "://" + context.Request.OriginalUrl.Host + "/obo-mcp-server";
                 return JsonConvert.SerializeObject(new {
                     resource = $"{gatewayUrl}/mcp",
                     authorization_servers = new[] {

@@ -78,7 +78,7 @@ resource mcpAuthApi 'Microsoft.ApiManagement/service/apis@2023-05-01-preview' = 
   properties: {
     displayName: 'MCP Auth'
     description: 'Protected Resource Metadata endpoint for MCP OAuth2 discovery'
-    path: 'obo-mcp-server'
+    path: 'mcp-auth'
     protocols: [
       'https'
     ]
