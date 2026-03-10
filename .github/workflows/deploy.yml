@@ -46,5 +46,6 @@ jobs:
           ENTRAID_TENANT_ID: ${{ secrets.ENTRAID_TENANT_ID }}
           OBO_CLIENT_ID: ${{ secrets.OBO_CLIENT_ID }}
           OBO_CLIENT_SECRET: ${{ secrets.OBO_CLIENT_SECRET }}
+          MCP_CLIENT_AUDIENCE: ${{ secrets.MCP_CLIENT_AUDIENCE }}
           APIM_PUBLISHER_EMAIL: ${{ vars.APIM_PUBLISHER_EMAIL }}
           APIM_PUBLISHER_NAME: ${{ vars.APIM_PUBLISHER_NAME }}
