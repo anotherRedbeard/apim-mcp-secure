@@ -41,9 +41,7 @@ jobs:
         shell: pwsh
 
       - name: Provision and deploy
-        run: |
-          azd env set MCP_CLIENT_AUDIENCE "$MCP_CLIENT_AUDIENCE"
-          azd up --no-prompt
+        run: azd up --no-prompt
         env:
           ENTRAID_TENANT_ID: ${{ secrets.ENTRAID_TENANT_ID }}
           OBO_CLIENT_ID: ${{ secrets.OBO_CLIENT_ID }}
