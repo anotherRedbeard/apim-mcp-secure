@@ -22,6 +22,9 @@ param entraIdTenantId string
 @description('Client ID for OBO app registration')
 param oboClientId string
 
+@description('Client ID of the inbound token audience (MCP client app registration)')
+param mcpClientAudience string
+
 @secure()
 @description('Client secret for OBO app registration')
 param oboClientSecret string
@@ -70,6 +73,16 @@ resource namedValueClientSecret 'Microsoft.ApiManagement/service/namedValues@202
     displayName: 'obo-client-secret'
     value: oboClientSecret
     secret: true
+  }
+}
+
+resource namedValueMcpClientAudience 'Microsoft.ApiManagement/service/namedValues@2024-06-01-preview' = {
+  parent: apim
+  name: 'mcp-client-audience'
+  properties: {
+    displayName: 'mcp-client-audience'
+    value: mcpClientAudience
+    secret: false
   }
 }
 

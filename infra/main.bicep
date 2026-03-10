@@ -15,6 +15,9 @@ param entraIdTenantId string
 @description('Client ID of the middle-tier app registration (used for OBO)')
 param oboClientId string
 
+@description('Client ID of the inbound token audience (MCP client app registration)')
+param mcpClientAudience string
+
 @secure()
 @description('Client secret of the middle-tier app registration (used for OBO)')
 param oboClientSecret string
@@ -60,6 +63,7 @@ module apim './modules/apim.bicep' = {
     publisherName: apimPublisherName
     entraIdTenantId: entraIdTenantId
     oboClientId: oboClientId
+    mcpClientAudience: mcpClientAudience
     oboClientSecret: oboClientSecret
   }
 }

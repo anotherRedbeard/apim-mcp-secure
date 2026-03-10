@@ -8,7 +8,7 @@
         <base />
         <validate-azure-ad-token tenant-id="{{entraid-tenant}}" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized">
             <audiences>
-                <audience>{{obo-client-id}}</audience>
+                <audience>{{mcp-client-audience}}</audience>
             </audiences>
         </validate-azure-ad-token>
     </inbound>
