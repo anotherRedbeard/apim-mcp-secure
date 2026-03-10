@@ -22,6 +22,9 @@
     },
     "apimPublisherName": {
       "value": "${APIM_PUBLISHER_NAME}"
+    },
+    "mcpClientAudience": {
+      "value": "${MCP_CLIENT_AUDIENCE}"
     }
   }
 }
