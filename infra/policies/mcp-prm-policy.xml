@@ -1,6 +1,7 @@
 <!--
     Protected Resource Metadata (RFC 9728) policy.
     Returns PRM JSON for OAuth 2.0 resource discovery.
+    Dynamically builds the resource URL from the wildcard path parameter.
     Anonymous access — no authentication required.
 -->
 <policies>
@@ -14,8 +15,10 @@
                 <value>public, max-age=3600</value>
             </set-header>
             <set-body>@{
+                var mcpPath = context.Request.MatchedParameters["mcpPath"];
+                var gatewayUrl = "{{APIMGatewayURL}}";
                 return JsonConvert.SerializeObject(new {
-                    resource = "{{APIMGatewayURL}}/{{McpApiPath}}",
+                    resource = $"{gatewayUrl}/{mcpPath}",
                     authorization_servers = new[] {
                         $"https://login.microsoftonline.com/{{entraid-tenant}}/v2.0"
                     },

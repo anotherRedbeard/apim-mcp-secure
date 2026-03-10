@@ -114,8 +114,8 @@ resource mcpAuthApi 'Microsoft.ApiManagement/service/apis@2024-06-01-preview' = 
   name: 'mcp-auth'
   properties: {
     displayName: 'MCP Auth'
-    description: 'Protected Resource Metadata endpoint for MCP OAuth2 discovery'
-    path: 'mcp-auth'
+    description: 'Protected Resource Metadata endpoint for MCP OAuth2 discovery (RFC 9728)'
+    path: ''
     protocols: [
       'https'
     ]
@@ -129,8 +129,16 @@ resource mcpAuthOperation 'Microsoft.ApiManagement/service/apis/operations@2024-
   properties: {
     displayName: 'Get Protected Resource Metadata'
     method: 'GET'
-    urlTemplate: '/.well-known/oauth-protected-resource'
-    description: 'Returns the OAuth 2.0 Protected Resource Metadata (RFC 9728) for MCP server discovery'
+    urlTemplate: '/.well-known/oauth-protected-resource/{*mcpPath}'
+    description: 'Returns the OAuth 2.0 Protected Resource Metadata (RFC 9728) for any MCP server'
+    templateParameters: [
+      {
+        name: 'mcpPath'
+        description: 'Path of the MCP server (e.g. obo-mcp-server/mcp)'
+        type: 'string'
+        required: true
+      }
+    ]
     responses: [
       {
         statusCode: 200
