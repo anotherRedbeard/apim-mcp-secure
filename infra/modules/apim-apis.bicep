@@ -164,6 +164,7 @@ resource mcpServerApi 'Microsoft.ApiManagement/service/apis@2024-06-01-preview' 
     description: 'MCP server proxy to the Function App REST API'
     type: 'mcp'
     subscriptionRequired: false
+    sourceApiId: functionAppApi.id
     backendId: functionAppBackend.name
     path: '/${mcpApiPath}'
     protocols: [
