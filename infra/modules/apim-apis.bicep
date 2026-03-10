@@ -92,6 +92,11 @@ resource getMeOperation 'Microsoft.ApiManagement/service/apis/operations@2024-06
   name: 'getMe'
 }
 
+resource echoOperation 'Microsoft.ApiManagement/service/apis/operations@2024-06-01-preview' existing = {
+  parent: functionAppApi
+  name: 'echo'
+}
+
 resource getMeOperationPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2024-06-01-preview' = {
   parent: getMeOperation
   name: 'policy'
@@ -164,15 +169,22 @@ resource mcpServerApi 'Microsoft.ApiManagement/service/apis@2024-06-01-preview' 
     description: 'MCP server proxy to the Function App REST API'
     type: 'mcp'
     subscriptionRequired: false
-    sourceApiId: functionAppApi.id
-    backendId: functionAppBackend.name
-    path: '/${mcpApiPath}'
+    path: 'obo-mcp-server'
     protocols: [
       'https'
     ]
-    mcpProperties: {
-      transportType: 'streamable'
-    }
+    mcpTools: [
+      {
+        name: 'echo'
+        description: 'Echo a parameter back'
+        operationId: echoOperation.id
+      }
+      {
+        name: 'getMe'
+        description: 'Get current user profile from Microsoft Graph via OBO token exchange'
+        operationId: getMeOperation.id
+      }
+    ]
     authenticationSettings: {
       oAuth2AuthenticationSettings: []
       openidAuthenticationSettings: []
