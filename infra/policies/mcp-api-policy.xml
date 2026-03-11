@@ -27,7 +27,7 @@
                     <set-header name="WWW-Authenticate" exists-action="override">
                         <value>@{
                             var gatewayUrl = "{{APIMGatewayURL}}";
-                            var apiPath = context.Api.Path;
+                            var apiPath = context.Api.Path.TrimStart('/');
                             return "Bearer error=\"invalid_token\", resource_metadata=\"" + gatewayUrl + "/.well-known/oauth-protected-resource/" + apiPath + "/mcp\"";
                         }</value>
                     </set-header>
