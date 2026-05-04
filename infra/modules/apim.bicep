@@ -22,7 +22,7 @@ param entraIdTenantId string
 @description('Client ID for OBO app registration')
 param oboClientId string
 
-@description('Client ID of the inbound token audience (MCP client app registration)')
+@description('Audience to validate on inbound tokens — set to the Application ID URI of the backend API app (e.g., api://<obo-client-id>)')
 param mcpClientAudience string
 
 @secure()

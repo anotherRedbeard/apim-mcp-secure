@@ -41,10 +41,36 @@ MCP Client
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Azure Functions Core Tools v4](https://learn.microsoft.com/azure/azure-functions/functions-run-local)
 - An Azure subscription
-- **3 Entra ID app registrations** (already created):
-  1. **Client app** — used by the MCP client to get tokens
-  2. **Middle-tier API app** — defines `access_mcp` scope, performs OBO, has `User.Read` delegated permission
-  3. **APIM/Resource app** (if separate)
+- **2 Entra ID app registrations** (see setup steps below)
+
+## Entra ID App Registration Setup
+
+You need two app registrations: a **client app** (used by the MCP client) and a **backend API app** (defines the `access_mcp` scope, performs OBO, holds the `User.Read` delegated permission).
+
+### App 1 — Client App (MCP Client)
+
+This is the public client your MCP client tool uses to sign users in and request tokens.
+
+1. In the [Azure Portal](https://portal.azure.com), go to **Microsoft Entra ID → App registrations → New registration**.
+2. Name it (e.g., `mcp-client`), leave the redirect URI blank for now, and click **Register**.
+3. Note the **Application (client) ID** — this is what your MCP client will use.
+4. Under **Authentication**, enable **Allow public client flows** (required for device code / interactive flows).
+5. No client secret needed for this app.
+
+### App 2 — Backend API App (OBO Middle-Tier)
+
+This app defines the `access_mcp` scope that the client requests, and it performs the OBO exchange to get a Graph token on behalf of the user.
+
+1. Register a new app (e.g., `mcp-backend-api`).
+2. Note the **Application (client) ID** → this becomes `OBO_CLIENT_ID`.
+3. **Expose an API:**
+   - Set the **Application ID URI** to `api://<OBO_CLIENT_ID>` → this becomes `MCP_CLIENT_AUDIENCE`.
+   - Add a scope named `access_mcp` (e.g., display name: "Access MCP Server"), set to **Admins and users**.
+   - Under **Authorized client applications**, add App 1's client ID and authorize it for the `access_mcp` scope.
+4. **API permissions:**
+   - Add `Microsoft Graph → User.Read` (delegated).
+   - Grant admin consent.
+5. **Certificates & secrets:** Create a new client secret → this becomes `OBO_CLIENT_SECRET`.
 
 ## Quick Start
 
@@ -58,8 +84,9 @@ azd init
 
 ```bash
 azd env set ENTRAID_TENANT_ID <your-tenant-id>
-azd env set OBO_CLIENT_ID <middle-tier-app-client-id>
-azd env set OBO_CLIENT_SECRET <middle-tier-app-client-secret>
+azd env set OBO_CLIENT_ID <app2-client-id>
+azd env set OBO_CLIENT_SECRET <app2-client-secret>
+azd env set MCP_CLIENT_AUDIENCE api://<app2-client-id>
 azd env set APIM_PUBLISHER_EMAIL <your-email>
 azd env set APIM_PUBLISHER_NAME <your-name>
 ```
@@ -108,11 +135,12 @@ The Function App runs locally at `http://localhost:7071`:
 
 ## APIM Named Values
 
-| Named Value | Description | Secret |
-|---|---|---|
-| `entraid-tenant` | Entra ID tenant ID | No |
-| `obo-client-id` | Middle-tier app registration client ID | No |
-| `obo-client-secret` | Middle-tier app registration client secret | Yes |
+| Named Value | Source env var | Description | Secret |
+|---|---|---|---|
+| `entraid-tenant` | `ENTRAID_TENANT_ID` | Entra ID tenant ID | No |
+| `obo-client-id` | `OBO_CLIENT_ID` | Backend app (App 2) client ID — used as the OBO actor | No |
+| `obo-client-secret` | `OBO_CLIENT_SECRET` | Backend app (App 2) client secret — used for OBO token exchange | Yes |
+| `mcp-client-audience` | `MCP_CLIENT_AUDIENCE` | Audience APIM validates incoming tokens against — set to `api://<OBO_CLIENT_ID>` | No |
 
 ## Security Notes
 
