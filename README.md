@@ -74,13 +74,19 @@ This app defines the `access_mcp` scope that the client requests, and it perform
 
 ## Quick Start
 
-### 1. Initialize the environment
+### 1. Authenticate with Azure
+
+```bash
+azd auth login
+```
+
+### 2. Initialize the environment
 
 ```bash
 azd init
 ```
 
-### 2. Set required environment variables
+### 3. Set required environment variables
 
 ```bash
 azd env set ENTRAID_TENANT_ID <your-tenant-id>
@@ -91,7 +97,7 @@ azd env set APIM_PUBLISHER_EMAIL <your-email>
 azd env set APIM_PUBLISHER_NAME <your-name>
 ```
 
-### 3. Deploy to Azure
+### 4. Deploy to Azure
 
 ```bash
 azd up
