@@ -18,6 +18,12 @@ param oboClientId string
 @description('Audience to validate on inbound tokens — set to the Application ID URI of the backend API app (e.g., api://<obo-client-id>)')
 param mcpClientAudience string
 
+@description('Azure DevOps organization name used by the remote MCP server')
+param azureDevOpsOrganizationName string
+
+@description('Fully qualified delegated scope granted to the OBO app for the Azure DevOps MCP enterprise application')
+param azureDevOpsMcpScope string
+
 @secure()
 @description('Client secret of the middle-tier app registration (used for OBO)')
 param oboClientSecret string
@@ -64,6 +70,7 @@ module apim './modules/apim.bicep' = {
     entraIdTenantId: entraIdTenantId
     oboClientId: oboClientId
     mcpClientAudience: mcpClientAudience
+    azureDevOpsMcpScope: azureDevOpsMcpScope
     oboClientSecret: oboClientSecret
   }
 }
@@ -75,6 +82,7 @@ module apimApis './modules/apim-apis.bicep' = {
     apimName: apim.outputs.apimName
     functionAppName: functionApp.outputs.functionAppName
     functionAppDefaultHostname: functionApp.outputs.functionAppDefaultHostname
+    azureDevOpsOrganizationName: azureDevOpsOrganizationName
   }
 }
 
@@ -83,3 +91,4 @@ output AZURE_RESOURCE_GROUP string = rg.name
 output AZURE_FUNCTION_APP_NAME string = functionApp.outputs.functionAppName
 output AZURE_APIM_NAME string = apim.outputs.apimName
 output AZURE_APIM_GATEWAY_URL string = apim.outputs.apimGatewayUrl
+output AZURE_APIM_AZDO_MCP_URL string = '${apim.outputs.apimGatewayUrl}/azure-devops-mcp/mcp'

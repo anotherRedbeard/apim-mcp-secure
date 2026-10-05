@@ -25,6 +25,12 @@
     },
     "mcpClientAudience": {
       "value": "${MCP_CLIENT_AUDIENCE}"
+    },
+    "azureDevOpsOrganizationName": {
+      "value": "${AZDO_ORGANIZATION}"
+    },
+    "azureDevOpsMcpScope": {
+      "value": "${AZDO_MCP_SCOPE}"
     }
   }
 }

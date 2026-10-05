@@ -25,6 +25,9 @@ param oboClientId string
 @description('Audience to validate on inbound tokens — set to the Application ID URI of the backend API app (e.g., api://<obo-client-id>)')
 param mcpClientAudience string
 
+@description('Fully qualified delegated scope for the Azure DevOps MCP backend')
+param azureDevOpsMcpScope string
+
 @secure()
 @description('Client secret for OBO app registration')
 param oboClientSecret string
@@ -82,6 +85,16 @@ resource namedValueMcpClientAudience 'Microsoft.ApiManagement/service/namedValue
   properties: {
     displayName: 'mcp-client-audience'
     value: mcpClientAudience
+    secret: false
+  }
+}
+
+resource namedValueAzureDevOpsMcpScope 'Microsoft.ApiManagement/service/namedValues@2024-06-01-preview' = {
+  parent: apim
+  name: 'azdo-mcp-scope'
+  properties: {
+    displayName: 'azdo-mcp-scope'
+    value: azureDevOpsMcpScope
     secret: false
   }
 }
