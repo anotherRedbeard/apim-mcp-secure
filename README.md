@@ -118,7 +118,25 @@ The hosted remote server's Entra enterprise application must exist in your tenan
 
    Run the inspection command again and confirm the result is named **Azure DevOps MCP**. If it already existed, do not create it again.
 3. In **Microsoft Entra ID → App registrations → App 2 → API permissions**, select **Add a permission → APIs my organization uses**, find **Azure DevOps MCP** (app ID above), and select **Delegated permissions**. Choose the permission(s) appropriate for the operations you intend to expose, then add them and grant admin consent if required by your tenant.
-4. Set `AZDO_MCP_SCOPE` to the fully qualified delegated scope: the enterprise application's resource identifier from `resourceIdentifiers`, followed by `/` and the selected enabled scope `value` from `scopes` (for example, `<resource-identifier>/<scope-value>`). Do not guess a scope from its display name. If the scope list is empty, or there is no suitable delegated permission for the project-listing tool, stop: the OBO deployment is not ready and you must resolve the Entra app permission with your tenant admin or Microsoft documentation/support before running `azd up`.
+4. Set `AZDO_MCP_SCOPE` to the scope advertised by the hosted server's OAuth Protected Resource Metadata:
+
+   ```bash
+   azd env set AZDO_MCP_SCOPE 'https://mcp.dev.azure.com/.default'
+   ```
+
+   This value was verified against the metadata for `FDPO-25-ORG`. To inspect the metadata for your organization:
+
+   ```bash
+   curl --fail --silent --show-error \
+     'https://mcp.dev.azure.com/.well-known/oauth-protected-resource/<your-organization>' \
+     | python3 -m json.tool
+   ```
+
+   The response advertises `scopes_supported: ["https://mcp.dev.azure.com/.default"]`. `.default` requests the delegated permissions configured and consented to for App 2 on that resource; it is not an Azure DevOps project permission and does not grant consent by itself. Do not replace it with a guessed project-read scope or the Azure DevOps REST API resource.
+
+   If the enterprise application's enabled delegated scope list is empty, or the required permission cannot be selected and consented to for App 2, stop and resolve the permission setup before deployment. Confirming the advertised scope does not prove that the OBO exchange works: an authenticated end-to-end test is still required.
+
+Reference: [Microsoft's remote Azure DevOps MCP setup](https://learn.microsoft.com/azure/devops/mcp-server/remote-mcp-server?view=azure-devops) and [missing enterprise application troubleshooting](https://learn.microsoft.com/azure/devops/mcp-server/remote-mcp-server-troubleshooting?view=azure-devops#cant-find-the-azure-devops-mcp-enterprise-application-in-the-tenant).
 
 For the demo, the downstream MCP tool is `core_list_projects`. The signed-in user's Azure DevOps organization membership and project permissions still determine which project data the request can return; OAuth delegated consent does not grant the user additional Azure DevOps access.
 
@@ -144,12 +162,12 @@ azd env set OBO_CLIENT_ID <app2-client-id>
 azd env set OBO_CLIENT_SECRET <app2-client-secret>
 azd env set MCP_CLIENT_AUDIENCE api://<app2-client-id>
 azd env set AZDO_ORGANIZATION <your-azure-devops-organization>
-azd env set AZDO_MCP_SCOPE <fully-qualified-azure-devops-mcp-delegated-scope>
+azd env set AZDO_MCP_SCOPE 'https://mcp.dev.azure.com/.default'
 azd env set APIM_PUBLISHER_EMAIL <your-email>
 azd env set APIM_PUBLISHER_NAME <your-name>
 ```
 
-Complete the [Azure DevOps MCP enterprise application and permission setup](#provision-the-azure-devops-mcp-enterprise-application-and-grant-permission) before setting `AZDO_MCP_SCOPE` or running deployment. `AZDO_MCP_SCOPE` must be the exact scope URI/identifier confirmed in the service principal and granted to App 2; if the enterprise app publishes multiple scopes, include only the required delegated scopes as space-separated values.
+Complete the [Azure DevOps MCP enterprise application and permission setup](#provision-the-azure-devops-mcp-enterprise-application-and-grant-permission) before running deployment. The OBO policy requests `https://mcp.dev.azure.com/.default`, which uses App 2's configured and consented delegated permissions for the hosted MCP resource.
 
 For a manual test token, request App 2's `access_mcp` scope with the public client:
 
@@ -214,7 +232,7 @@ The Function App runs locally at `http://localhost:7071`:
 | `obo-client-id` | `OBO_CLIENT_ID` | Backend app (App 2) client ID — used as the OBO actor | No |
 | `obo-client-secret` | `OBO_CLIENT_SECRET` | Backend app (App 2) client secret — used for OBO token exchange | Yes |
 | `mcp-client-audience` | `MCP_CLIENT_AUDIENCE` | Audience APIM validates incoming tokens against — set to `api://<OBO_CLIENT_ID>` | No |
-| `azdo-mcp-scope` | `AZDO_MCP_SCOPE` | Fully qualified delegated scope on the Azure DevOps MCP API used by the OBO exchange | No |
+| `azdo-mcp-scope` | `AZDO_MCP_SCOPE` | `https://mcp.dev.azure.com/.default`, advertised by the hosted MCP server and requested during OBO | No |
 
 ## Security Notes
 
@@ -229,6 +247,6 @@ The Function App runs locally at `http://localhost:7071`:
 
 ## Extending the MCP endpoint
 
-Tools provided by `mcp.dev.azure.com` are forwarded without adding a Bicep resource for each tool; for this demo, discover the tool list and call the upstream project-listing tool. To use another Azure DevOps capability, grant only its required delegated permission to App 2 and update `AZDO_MCP_SCOPE` to the exact fully qualified scope value. If multiple delegated scopes are required, provide their space-separated scope URIs.
+Tools provided by `mcp.dev.azure.com` are forwarded without adding a Bicep resource for each tool; for this demo, discover the tool list and call `core_list_projects`. To use another Azure DevOps capability, review its required delegated permissions for App 2 and obtain consent as needed. Keep `AZDO_MCP_SCOPE` set to `https://mcp.dev.azure.com/.default`; the user's Azure DevOps permissions remain the final access boundary.
 
 To add a custom tool that the hosted Azure DevOps MCP server doesn't provide, add a REST operation to the Function App's OpenAPI definition and map that operation in the existing `mcpTools` list in `infra/modules/apim-apis.bicep`.
