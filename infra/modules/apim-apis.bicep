@@ -7,6 +7,9 @@ param functionAppName string
 @description('Default hostname of the Function App')
 param functionAppDefaultHostname string
 
+@description('Azure DevOps organization name used by the remote MCP server')
+param azureDevOpsOrganizationName string
+
 @description('MCP API path served via APIM')
 param mcpApiPath string = 'obo-mcp-server'
 
@@ -215,5 +218,45 @@ resource mcpServerApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-
   dependsOn: [
     apimGatewayUrlNamedValue
     mcpApiPathNamedValue
+  ]
+}
+
+// ──────────────────────────────────────────────────────
+// API 4: Azure DevOps remote MCP server passthrough
+// ──────────────────────────────────────────────────────
+resource azureDevOpsMcpServerApi 'Microsoft.ApiManagement/service/apis@2025-09-01-preview' = {
+  parent: apim
+  name: 'azure-devops-mcp'
+  properties: {
+    displayName: 'Azure DevOps MCP'
+    description: 'Pass-through to the Azure DevOps hosted MCP server, preserving its native toolset'
+    type: 'mcp'
+    subscriptionRequired: false
+    path: 'azure-devops-mcp'
+    protocols: [
+      'https'
+    ]
+    serviceUrl: 'https://mcp.dev.azure.com/${azureDevOpsOrganizationName}'
+    mcpProperties: {
+      transportType: 'streamable'
+      endpoints: [
+        {
+          name: 'message'
+          uriTemplate: '/mcp'
+        }
+      ]
+    }
+  }
+}
+
+resource azureDevOpsMcpServerApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2025-09-01-preview' = {
+  parent: azureDevOpsMcpServerApi
+  name: 'policy'
+  properties: {
+    format: 'rawxml'
+    value: loadTextContent('../policies/obo-azdo-mcp-policy.xml')
+  }
+  dependsOn: [
+    apimGatewayUrlNamedValue
   ]
 }
