@@ -86,10 +86,41 @@ This app defines the `access_mcp` scope that the client requests, and performs O
    - Under **Authorized client applications**, add App 1's client ID and authorize it for the `access_mcp` scope.
 4. **API permissions:**
    - Add `Microsoft Graph → User.Read` (delegated).
-   - Add the least-privilege, read-only delegated permission needed to list projects from the **Azure DevOps MCP** API (app ID above). Grant admin consent for the permissions you selected.
+   - Add the delegated permission(s) required by the Azure DevOps MCP remote server. Follow the procedure below to provision the enterprise application if needed and inspect the permissions it actually publishes.
 5. **Certificates & secrets:** Create a new client secret → this becomes `OBO_CLIENT_SECRET`.
 
-Set `AZDO_MCP_SCOPE` to the exact fully qualified scope URI shown for the delegated permission you grant in Entra, following the Azure DevOps MCP documentation. Do not infer the scope URI from its display name; the value is an explicit deployment input.
+### Provision the Azure DevOps MCP enterprise application and grant permission
+
+The hosted remote server's Entra enterprise application must exist in your tenant before App 2 can request a delegated token for it. Microsoft documents this as creating the service principal for the Azure DevOps MCP app. This step creates the enterprise application entry; it does not grant Azure DevOps access or change Azure resources.
+
+1. Sign in to the tenant that backs the Azure DevOps organization with an account that has the **Application Administrator**, **Cloud Application Administrator**, or **Global Administrator** role:
+
+   ```bash
+   az login --tenant <entra-tenant-id> --allow-no-subscriptions
+   az account show --query "{tenant:tenantId,user:user.name}" -o table
+   ```
+
+   Confirm the displayed tenant ID is the tenant for the Azure DevOps organization.
+2. Check whether the service principal already exists:
+
+   ```bash
+   az rest --method get \
+     --url "https://graph.microsoft.com/v1.0/servicePrincipals(appId='2a72489c-aab2-4b65-b93a-a91edccf33b8')" \
+     --query "{name:displayName,appId:appId,resourceIdentifiers:servicePrincipalNames,scopes:oauth2PermissionScopes[?isEnabled].{value:value,name:adminConsentDisplayName,description:adminConsentDescription}}" \
+     -o json
+   ```
+
+   If it returns `404` / `Request_ResourceNotFound`, create the service principal:
+
+   ```bash
+   az ad sp create --id 2a72489c-aab2-4b65-b93a-a91edccf33b8
+   ```
+
+   Run the inspection command again and confirm the result is named **Azure DevOps MCP**. If it already existed, do not create it again.
+3. In **Microsoft Entra ID → App registrations → App 2 → API permissions**, select **Add a permission → APIs my organization uses**, find **Azure DevOps MCP** (app ID above), and select **Delegated permissions**. Choose the permission(s) appropriate for the operations you intend to expose, then add them and grant admin consent if required by your tenant.
+4. Set `AZDO_MCP_SCOPE` to the fully qualified delegated scope: the enterprise application's resource identifier from `resourceIdentifiers`, followed by `/` and the selected enabled scope `value` from `scopes` (for example, `<resource-identifier>/<scope-value>`). Do not guess a scope from its display name. If the scope list is empty, or there is no suitable delegated permission for the project-listing tool, stop: the OBO deployment is not ready and you must resolve the Entra app permission with your tenant admin or Microsoft documentation/support before running `azd up`.
+
+For the demo, the downstream MCP tool is `core_list_projects`. The signed-in user's Azure DevOps organization membership and project permissions still determine which project data the request can return; OAuth delegated consent does not grant the user additional Azure DevOps access.
 
 ## Quick Start
 
@@ -117,6 +148,8 @@ azd env set AZDO_MCP_SCOPE <fully-qualified-azure-devops-mcp-delegated-scope>
 azd env set APIM_PUBLISHER_EMAIL <your-email>
 azd env set APIM_PUBLISHER_NAME <your-name>
 ```
+
+Complete the [Azure DevOps MCP enterprise application and permission setup](#provision-the-azure-devops-mcp-enterprise-application-and-grant-permission) before setting `AZDO_MCP_SCOPE` or running deployment. `AZDO_MCP_SCOPE` must be the exact scope URI/identifier confirmed in the service principal and granted to App 2; if the enterprise app publishes multiple scopes, include only the required delegated scopes as space-separated values.
 
 For a manual test token, request App 2's `access_mcp` scope with the public client:
 
