@@ -7,8 +7,8 @@ param azureDevOpsMcpApiName string
 
 @minValue(0)
 @maxValue(8192)
-@description('Temporary payload logging for all APIs and both frontend/backend directions. Set to 0 after diagnosis; bodies can contain sensitive data and response buffering can disrupt MCP streaming.')
-param payloadBytes int = 8192
+@description('Payload logging for all APIs and both frontend/backend directions. Disabled by default; bodies can contain sensitive data and response buffering can disrupt MCP streaming.')
+param payloadBytes int = 0
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: 'log-${resourceToken}'

@@ -244,7 +244,7 @@ Deployment creates workspace-backed Application Insights (`appi-<resourceToken>`
 
 Application Insights logging is enabled at **All APIs** with 100% sampling for this diagnostic sample, including OAuth metadata requests and failed requests. No headers are selected for logging, and client IP logging is disabled. The Azure DevOps policy emits markers for inbound processing, the OBO token endpoint's HTTP status, and policy errors; those markers do not log tokens, secrets, or token response bodies. This instruments APIM, not the Function App's internal code.
 
-**Temporary payload diagnostics:** **Number of payload bytes to log** is set to **8192** for frontend requests, frontend responses, backend requests, and backend responses at **All APIs**, as explicitly requested for troubleshooting. The Azure DevOps API-level diagnostic uses the same settings so it does not override them with zero bytes. This is a maximum of 8192 bytes per payload, not unlimited capture. Payloads can contain sensitive Azure DevOps content or credentials; the OBO exchange itself contains a client secret and tokens. Do not assume disabling Authorization header logging makes body logging safe, or that every internal policy request is captured. Restrict telemetry access and handle any captured credentials as exposed. Response-body logging can buffer responses and disrupt MCP streaming. Set `payloadBytes` to `0` in `infra/modules/monitoring.bicep` and provision again after diagnosis (or sooner if streaming fails).
+**Payload logging is disabled by default:** **Number of payload bytes to log** is **0** for frontend and backend requests and responses, both at **All APIs** and on the Azure DevOps MCP API. Request statuses, timings, dependencies, and policy markers remain enabled. You can manually enable payload logging in the portal for troubleshooting, but the next provisioning run restores the code-defined zero-byte settings. Payloads can contain sensitive Azure DevOps content or credentials; the OBO exchange itself contains a client secret and tokens. Restrict telemetry access and handle any captured credentials as exposed. Response-body logging can buffer responses and disrupt MCP streaming; disable manual payload logging after diagnosis.
 
 To update an existing deployment, pull `main` and run `azd provision` using your existing environment. Function code has not changed, so `azd up` is not required. Restart the APIM MCP connection after provisioning, then allow several minutes for telemetry ingestion.
 
@@ -269,7 +269,7 @@ union withsource=TelemetryTable requests, dependencies, traces
 
 Look for the inbound marker, the OBO HTTP status, and any dependency to `mcp.dev.azure.com`. A successful OBO status alone does not establish that APIM forwarded the MCP request. If there is no backend dependency, that is evidence to investigate, not proof of why routing failed. No telemetry can also indicate ingestion/identity propagation delays or logging configuration problems; verify logging with a known request before concluding the client never contacted APIM.
 
-Telemetry ingestion incurs Azure Monitor charges. Reduce the sampling percentage in `infra/modules/monitoring.bicep` after troubleshooting and disable temporary payload logging. Do not add authentication headers to the logging configuration.
+Telemetry ingestion incurs Azure Monitor charges. Reduce the sampling percentage in `infra/modules/monitoring.bicep` after troubleshooting. Do not add authentication headers to the logging configuration.
 
 ## Security Notes
 
@@ -279,7 +279,7 @@ Telemetry ingestion incurs Azure Monitor charges. Reduce the sampling percentage
 - The Azure DevOps pass-through forwards the user's OBO token to the hosted MCP endpoint; it does not use a shared service identity or PAT.
 - The pass-through exposes the hosted server's full native toolset. Restrict the published MCP tools and add APIM access controls/rate limits before exposing it broadly; the sample MCP APIs do not require APIM subscription keys.
 - APIM's external MCP pass-through supports tools and resources, but not upstream MCP prompts; the project-listing demo uses a tool.
-- MCP streaming can be disrupted if APIM diagnostic settings log response bodies. The temporary all-APIs 8192-byte payload logging is for diagnosis only; restore it to zero for normal operation.
+- MCP streaming can be disrupted if APIM diagnostic settings log response bodies. The template disables payload logging; restore any manual diagnostic overrides to zero for normal operation.
 - For defense-in-depth, consider restricting Function App access to APIM only (VNet integration or function access keys)
 
 ## Extending the MCP endpoint
