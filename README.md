@@ -238,6 +238,8 @@ The Function App runs locally at `http://localhost:7071`:
 
 ## APIM observability
 
+Both MCP authentication policies accept the configured `mcp-client-audience` and the backend app's GUID from the existing `obo-client-id` named value. This supports the configured API URI audience and the GUID audience used by Entra v2 access tokens without hardcoding an application ID. Keep `MCP_CLIENT_AUDIENCE` set to the API URI if you need both forms accepted.
+
 Deployment creates workspace-backed Application Insights (`appi-<resourceToken>`) and a Log Analytics workspace (`log-<resourceToken>`) with 30-day workspace retention. APIM uses its system-assigned managed identity with the Monitoring Metrics Publisher role on Application Insights. The deploying identity must be allowed to create role assignments at that scope. No new environment variables are required.
 
 Application Insights logging is enabled at **All APIs** with 100% sampling for this diagnostic sample, including OAuth metadata requests and failed requests. Global frontend/backend body logging is disabled, no headers are selected for logging, and client IP logging is disabled. The Azure DevOps policy emits markers for inbound processing, the OBO token endpoint's HTTP status, and policy errors; those markers do not log tokens, secrets, or token response bodies. This instruments APIM, not the Function App's internal code.

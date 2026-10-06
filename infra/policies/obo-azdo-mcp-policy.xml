@@ -8,6 +8,7 @@
         <validate-azure-ad-token tenant-id="{{entraid-tenant}}" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized">
             <audiences>
                 <audience>{{mcp-client-audience}}</audience>
+                <audience>{{obo-client-id}}</audience>
             </audiences>
         </validate-azure-ad-token>
         <set-variable name="incoming_access_token" value="@(context.Request.Headers.GetValueOrDefault(&quot;Authorization&quot;, &quot;&quot;).Replace(&quot;Bearer &quot;, &quot;&quot;))" />
