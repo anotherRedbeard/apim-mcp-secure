@@ -38,6 +38,9 @@ resource apim 'Microsoft.ApiManagement/service@2024-06-01-preview' = {
   name: apimName
   location: location
   tags: tags
+  identity: {
+    type: 'SystemAssigned'
+  }
   sku: {
     name: 'Basicv2'
     capacity: 1
@@ -101,3 +104,4 @@ resource namedValueAzureDevOpsMcpScope 'Microsoft.ApiManagement/service/namedVal
 
 output apimName string = apim.name
 output apimGatewayUrl string = apim.properties.gatewayUrl
+output apimPrincipalId string = apim.identity.principalId

@@ -1,5 +1,9 @@
 <policies>
     <inbound>
+        <trace source="azdo-mcp" severity="information">
+            <message>Azure DevOps MCP request reached APIM inbound policy</message>
+            <metadata name="requestId" value="@(context.RequestId.ToString())" />
+        </trace>
         <base />
         <validate-azure-ad-token tenant-id="{{entraid-tenant}}" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized">
             <audiences>
@@ -33,6 +37,10 @@
                 </return-response>
             </when>
         </choose>
+        <trace source="azdo-mcp" severity="information">
+            <message>Azure DevOps MCP OBO token endpoint responded</message>
+            <metadata name="statusCode" value="@(((IResponse)context.Variables[&quot;obo_token_resp&quot;]).StatusCode.ToString())" />
+        </trace>
         <set-variable name="obo_json" value="@{
                 var response = (IResponse)context.Variables[&quot;obo_token_resp&quot;];
                 return response.Body.As&lt;JObject&gt;(preserveContent: true);
@@ -57,6 +65,11 @@
         <base />
     </outbound>
     <on-error>
+        <trace source="azdo-mcp" severity="error">
+            <message>Azure DevOps MCP policy processing failed</message>
+            <metadata name="source" value="@(context.LastError.Source)" />
+            <metadata name="reason" value="@(context.LastError.Reason)" />
+        </trace>
         <base />
         <choose>
             <when condition="@(context.Response.StatusCode == 401)">

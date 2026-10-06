@@ -236,6 +236,37 @@ The Function App runs locally at `http://localhost:7071`:
 | `mcp-client-audience` | `MCP_CLIENT_AUDIENCE` | Audience APIM validates incoming tokens against — set to `api://<OBO_CLIENT_ID>` | No |
 | `azdo-mcp-scope` | `AZDO_MCP_SCOPE` | `https://mcp.dev.azure.com/.default`, advertised by the hosted MCP server and requested during OBO | No |
 
+## APIM observability
+
+Deployment creates workspace-backed Application Insights (`appi-<resourceToken>`) and a Log Analytics workspace (`log-<resourceToken>`) with 30-day workspace retention. APIM uses its system-assigned managed identity with the Monitoring Metrics Publisher role on Application Insights. The deploying identity must be allowed to create role assignments at that scope. No new environment variables are required.
+
+Application Insights logging is enabled at **All APIs** with 100% sampling for this diagnostic sample, including OAuth metadata requests and failed requests. All frontend/backend body logging is disabled, no headers are selected for logging, and client IP logging is disabled. The Azure DevOps policy emits markers for inbound processing, the OBO token endpoint's HTTP status, and policy errors; it does not log tokens, secrets, or token response bodies. This instruments APIM, not the Function App's internal code.
+
+To update an existing deployment, pull `main` and run `azd provision` using your existing environment. Function code has not changed, so `azd up` is not required. Restart the APIM MCP connection after provisioning, then allow several minutes for telemetry ingestion.
+
+In the resource group's **Application Insights** resource, open **Logs** and run:
+
+```kusto
+requests
+| where timestamp > ago(30m)
+| where url contains "/azure-devops-mcp" or url contains "/.well-known/oauth-protected-resource"
+| project timestamp, name, url, resultCode, success, duration, operation_Id
+| order by timestamp desc
+```
+
+Seeing `/azure-devops-mcp/mcp` confirms the client request reached APIM; a metadata request alone does not confirm an MCP request. Copy an `operation_Id` from the request and correlate policy markers and outgoing dependencies:
+
+```kusto
+union withsource=TelemetryTable requests, dependencies, traces
+| where timestamp > ago(30m)
+| where operation_Id == "<operation_Id from the request>"
+| order by timestamp asc
+```
+
+Look for the inbound marker, the OBO HTTP status, and any dependency to `mcp.dev.azure.com`. A successful OBO status alone does not establish that APIM forwarded the MCP request. If there is no backend dependency, that is evidence to investigate, not proof of why routing failed. No telemetry can also indicate ingestion/identity propagation delays or logging configuration problems; verify logging with a known request before concluding the client never contacted APIM.
+
+Telemetry ingestion incurs Azure Monitor charges. Reduce the sampling percentage in `infra/modules/monitoring.bicep` after troubleshooting. Do not enable response-body logging for MCP streaming or add authentication headers to the logging configuration.
+
 ## Security Notes
 
 - The Function App itself does not validate tokens — APIM acts as the auth gateway

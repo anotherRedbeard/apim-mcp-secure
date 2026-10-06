@@ -86,6 +86,20 @@ module apimApis './modules/apim-apis.bicep' = {
   }
 }
 
+module monitoring './modules/monitoring.bicep' = {
+  name: 'monitoring'
+  scope: rg
+  params: {
+    location: location
+    resourceToken: resourceToken
+    tags: tags
+    apimName: apim.outputs.apimName
+    apimPrincipalId: apim.outputs.apimPrincipalId
+  }
+}
+
+output AZURE_APPLICATION_INSIGHTS_NAME string = monitoring.outputs.applicationInsightsName
+output AZURE_LOG_ANALYTICS_WORKSPACE_NAME string = monitoring.outputs.workspaceName
 output AZURE_LOCATION string = location
 output AZURE_RESOURCE_GROUP string = rg.name
 output AZURE_FUNCTION_APP_NAME string = functionApp.outputs.functionAppName
