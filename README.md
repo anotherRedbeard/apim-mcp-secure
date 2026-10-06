@@ -29,7 +29,7 @@ MCP Client
               └────────────────┘       └──────────────────┘
 ```
 
-APIM also forwards MCP traffic to `https://mcp.dev.azure.com/{organization}/mcp`.
+APIM links the Azure DevOps MCP API to the `azure-devops-mcp-backend` resource using `backendId`. The backend's exact endpoint is `https://mcp.dev.azure.com/{organization}` (no `/mcp` suffix). The public APIM endpoint remains `/azure-devops-mcp/mcp`.
 
 ### Auth Flow (GetMe)
 
@@ -43,7 +43,7 @@ APIM also forwards MCP traffic to `https://mcp.dev.azure.com/{organization}/mcp`
 
 1. The MCP client authenticates to the APIM MCP endpoint with the same `access_mcp` token.
 2. APIM validates that token, then exchanges it using OBO for the configured delegated Azure DevOps MCP scope.
-3. APIM forwards MCP Streamable HTTP requests to `https://mcp.dev.azure.com/{organization}/mcp` with the user's Azure DevOps MCP token.
+3. APIM forwards MCP Streamable HTTP requests to `https://mcp.dev.azure.com/{organization}` with the user's Azure DevOps MCP token.
 4. The hosted server returns its native tool list and handles tool calls. For this demo, ask the client to list projects.
 
 The user must have access to the Azure DevOps organization and projects. The delegated app permission limits what the client application can request; Azure DevOps still enforces the signed-in user's own permissions.
@@ -185,7 +185,7 @@ This provisions all infrastructure (Function App, APIM, Storage) and deploys the
 
 The `azure-devops-mcp` pass-through preserves the hosted server's native tools, so adding a native Azure DevOps MCP tool does not require a separate Bicep operation. Use APIM's MCP server **Tools** configuration to curate the tools exposed to clients.
 
-If provisioning fails with `Cannot deserialize the current JSON array` at `mcpProperties.endpoints`, update to the latest template. The deployed APIM API expects an object keyed by endpoint name (`endpoints: { message: { uriTemplate: '/mcp' } }`), despite the preview Bicep schema and reference examples declaring an array. The template uses `any()` only for this mismatched MCP property schema so the emitted ARM JSON has the object shape required by the service.
+If the portal shows the Azure DevOps server's source as **API** rather than an external/passthrough server, update to the latest template and provision again. External MCP passthrough requires a backend resource linked using `backendId`; `serviceUrl` alone did not configure passthrough in this deployment. The template follows the [Azure-Samples external MCP pattern](https://github.com/Azure-Samples/AI-Gateway/blob/main/modules/apim-streamable-mcp/api.bicep), clears the old service URL and synthetic endpoint mapping, and preserves the client URL. The deployed APIM endpoint contract uses a dictionary even though the preview Bicep schema declares an array, so `any()` is limited to `mcpProperties`.
 
 ### 5. Connect and try the demo
 
@@ -240,7 +240,9 @@ The Function App runs locally at `http://localhost:7071`:
 
 Deployment creates workspace-backed Application Insights (`appi-<resourceToken>`) and a Log Analytics workspace (`log-<resourceToken>`) with 30-day workspace retention. APIM uses its system-assigned managed identity with the Monitoring Metrics Publisher role on Application Insights. The deploying identity must be allowed to create role assignments at that scope. No new environment variables are required.
 
-Application Insights logging is enabled at **All APIs** with 100% sampling for this diagnostic sample, including OAuth metadata requests and failed requests. All frontend/backend body logging is disabled, no headers are selected for logging, and client IP logging is disabled. The Azure DevOps policy emits markers for inbound processing, the OBO token endpoint's HTTP status, and policy errors; it does not log tokens, secrets, or token response bodies. This instruments APIM, not the Function App's internal code.
+Application Insights logging is enabled at **All APIs** with 100% sampling for this diagnostic sample, including OAuth metadata requests and failed requests. Global frontend/backend body logging is disabled, no headers are selected for logging, and client IP logging is disabled. The Azure DevOps policy emits markers for inbound processing, the OBO token endpoint's HTTP status, and policy errors; those markers do not log tokens, secrets, or token response bodies. This instruments APIM, not the Function App's internal code.
+
+**Temporary diagnostic override:** the Azure DevOps MCP API's frontend request and response **Number of payload bytes to log** is set to **8192**, as explicitly requested for troubleshooting. Backend/OBO body logging remains disabled. Logged frontend payloads can contain Azure DevOps content or other sensitive client input; do not submit credentials in MCP payloads. Response-body logging can buffer responses and disrupt MCP streaming. Set `azureDevOpsMcpPayloadBytes` to `0` in `infra/modules/monitoring.bicep` and provision again after diagnosis (or sooner if streaming fails). Other APIs remain at zero payload bytes.
 
 To update an existing deployment, pull `main` and run `azd provision` using your existing environment. Function code has not changed, so `azd up` is not required. Restart the APIM MCP connection after provisioning, then allow several minutes for telemetry ingestion.
 
@@ -265,7 +267,7 @@ union withsource=TelemetryTable requests, dependencies, traces
 
 Look for the inbound marker, the OBO HTTP status, and any dependency to `mcp.dev.azure.com`. A successful OBO status alone does not establish that APIM forwarded the MCP request. If there is no backend dependency, that is evidence to investigate, not proof of why routing failed. No telemetry can also indicate ingestion/identity propagation delays or logging configuration problems; verify logging with a known request before concluding the client never contacted APIM.
 
-Telemetry ingestion incurs Azure Monitor charges. Reduce the sampling percentage in `infra/modules/monitoring.bicep` after troubleshooting. Do not enable response-body logging for MCP streaming or add authentication headers to the logging configuration.
+Telemetry ingestion incurs Azure Monitor charges. Reduce the sampling percentage in `infra/modules/monitoring.bicep` after troubleshooting and disable the temporary Azure DevOps frontend payload override. Do not add authentication headers to the logging configuration.
 
 ## Security Notes
 
@@ -275,7 +277,7 @@ Telemetry ingestion incurs Azure Monitor charges. Reduce the sampling percentage
 - The Azure DevOps pass-through forwards the user's OBO token to the hosted MCP endpoint; it does not use a shared service identity or PAT.
 - The pass-through exposes the hosted server's full native toolset. Restrict the published MCP tools and add APIM access controls/rate limits before exposing it broadly; the sample MCP APIs do not require APIM subscription keys.
 - APIM's external MCP pass-through supports tools and resources, but not upstream MCP prompts; the project-listing demo uses a tool.
-- MCP streaming can be disrupted if APIM diagnostic settings log response bodies. Keep response-body logging disabled for this MCP API.
+- MCP streaming can be disrupted if APIM diagnostic settings log response bodies. The temporary Azure DevOps frontend 8192-byte override is for diagnosis only; restore it to zero for normal operation.
 - For defense-in-depth, consider restricting Function App access to APIM only (VNet integration or function access keys)
 
 ## Extending the MCP endpoint

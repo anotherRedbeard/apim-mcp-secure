@@ -3,6 +3,12 @@ param resourceToken string
 param tags object
 param apimName string
 param apimPrincipalId string
+param azureDevOpsMcpApiName string
+
+@minValue(0)
+@maxValue(8192)
+@description('Temporary frontend payload logging for Azure DevOps MCP. Set to 0 after diagnosis; response buffering can disrupt MCP streaming.')
+param azureDevOpsMcpPayloadBytes int = 8192
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: 'log-${resourceToken}'
@@ -95,5 +101,45 @@ resource diagnostics 'Microsoft.ApiManagement/service/diagnostics@2024-05-01' = 
   }
 }
 
-output applicationInsightsName string = applicationInsights.name
-output workspaceName string = workspace.name
+resource azureDevOpsMcpApi 'Microsoft.ApiManagement/service/apis@2025-09-01-preview' existing = {
+  parent: apim
+  name: azureDevOpsMcpApiName
+}
+
+resource azureDevOpsDiagnostics 'Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01' = {
+  parent: azureDevOpsMcpApi
+  name: 'applicationinsights'
+  properties: {
+    loggerId: logger.id
+    alwaysLog: 'allErrors'
+    sampling: {
+      samplingType: 'fixed'
+      percentage: 100
+    }
+    verbosity: 'information'
+    httpCorrelationProtocol: 'W3C'
+    logClientIp: false
+    operationNameFormat: 'Name'
+    frontend: {
+      request: {
+        body: {
+          bytes: azureDevOpsMcpPayloadBytes
+        }
+        headers: []
+      }
+      response: {
+        body: {
+          bytes: azureDevOpsMcpPayloadBytes
+        }
+        headers: []
+      }
+    }
+
+    output applicationInsightsName string = applicationInsights.name
+    output workspaceName string = workspace.name
+    backend: {
+      request: messageDiagnostics
+      response: messageDiagnostics
+    }
+  }
+}

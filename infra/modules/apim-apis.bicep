@@ -224,6 +224,20 @@ resource mcpServerApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2024-
 // ──────────────────────────────────────────────────────
 // API 4: Azure DevOps remote MCP server passthrough
 // ──────────────────────────────────────────────────────
+resource azureDevOpsMcpBackend 'Microsoft.ApiManagement/service/backends@2025-09-01-preview' = {
+  parent: apim
+  name: 'azure-devops-mcp-backend'
+  properties: {
+    protocol: 'http'
+    url: 'https://mcp.dev.azure.com/${azureDevOpsOrganizationName}'
+    tls: {
+      validateCertificateChain: true
+      validateCertificateName: true
+    }
+    type: 'Single'
+  }
+}
+
 resource azureDevOpsMcpServerApi 'Microsoft.ApiManagement/service/apis@2025-09-01-preview' = {
   parent: apim
   name: 'azure-devops-mcp'
@@ -232,19 +246,17 @@ resource azureDevOpsMcpServerApi 'Microsoft.ApiManagement/service/apis@2025-09-0
     description: 'Pass-through to the Azure DevOps hosted MCP server, preserving its native toolset'
     type: 'mcp'
     subscriptionRequired: false
-    path: 'azure-devops-mcp'
+    path: 'azure-devops-mcp/mcp'
     protocols: [
       'https'
     ]
-    serviceUrl: 'https://mcp.dev.azure.com/${azureDevOpsOrganizationName}'
-    // The deployed API expects a dictionary; the preview Bicep schema still declares an array.
+    // backendId selects external MCP passthrough; serviceUrl alone creates an API-backed server.
+    backendId: azureDevOpsMcpBackend.name
+    serviceUrl: ''
+    // Clear the old synthetic endpoint mapping when updating the existing server.
     mcpProperties: any({
       transportType: 'streamable'
-      endpoints: {
-        message: {
-          uriTemplate: '/mcp'
-        }
-      }
+      endpoints: {}
     })
   }
 }
@@ -260,3 +272,5 @@ resource azureDevOpsMcpServerApiPolicy 'Microsoft.ApiManagement/service/apis/pol
     apimGatewayUrlNamedValue
   ]
 }
+
+output azureDevOpsMcpApiName string = azureDevOpsMcpServerApi.name
