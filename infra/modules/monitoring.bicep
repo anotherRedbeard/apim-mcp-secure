@@ -7,8 +7,8 @@ param azureDevOpsMcpApiName string
 
 @minValue(0)
 @maxValue(8192)
-@description('Temporary frontend payload logging for Azure DevOps MCP. Set to 0 after diagnosis; response buffering can disrupt MCP streaming.')
-param azureDevOpsMcpPayloadBytes int = 8192
+@description('Temporary payload logging for all APIs and both frontend/backend directions. Set to 0 after diagnosis; bodies can contain sensitive data and response buffering can disrupt MCP streaming.')
+param payloadBytes int = 8192
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: 'log-${resourceToken}'
@@ -68,10 +68,9 @@ resource logger 'Microsoft.ApiManagement/service/loggers@2024-05-01' = {
   ]
 }
 
-// Never buffer MCP payloads or capture authentication headers.
 var messageDiagnostics = {
   body: {
-    bytes: 0
+    bytes: payloadBytes
   }
   headers: []
 }
@@ -121,18 +120,8 @@ resource azureDevOpsDiagnostics 'Microsoft.ApiManagement/service/apis/diagnostic
     logClientIp: false
     operationNameFormat: 'Name'
     frontend: {
-      request: {
-        body: {
-          bytes: azureDevOpsMcpPayloadBytes
-        }
-        headers: []
-      }
-      response: {
-        body: {
-          bytes: azureDevOpsMcpPayloadBytes
-        }
-        headers: []
-      }
+      request: messageDiagnostics
+      response: messageDiagnostics
     }
     backend: {
       request: messageDiagnostics
