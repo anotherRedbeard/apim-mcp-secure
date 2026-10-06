@@ -244,7 +244,16 @@ Deployment creates workspace-backed Application Insights (`appi-<resourceToken>`
 
 Application Insights logging is enabled at **All APIs** with 100% sampling for this diagnostic sample, including OAuth metadata requests and failed requests. No headers are selected for logging, and client IP logging is disabled. The Azure DevOps policy emits markers for inbound processing, the OBO token endpoint's HTTP status, and policy errors; those markers do not log tokens, secrets, or token response bodies. This instruments APIM, not the Function App's internal code.
 
-**Payload logging is disabled by default:** **Number of payload bytes to log** is **0** for frontend and backend requests and responses, both at **All APIs** and on the Azure DevOps MCP API. Request statuses, timings, dependencies, and policy markers remain enabled. You can manually enable payload logging in the portal for troubleshooting, but the next provisioning run restores the code-defined zero-byte settings. Payloads can contain sensitive Azure DevOps content or credentials; the OBO exchange itself contains a client secret and tokens. Restrict telemetry access and handle any captured credentials as exposed. Response-body logging can buffer responses and disrupt MCP streaming; disable manual payload logging after diagnosis.
+**Payload logging is disabled by default:** **Number of payload bytes to log** is **0** for frontend and backend requests and responses at **All APIs**. The template does not create API-specific diagnostic overrides; MCP APIs inherit the global configuration. Request statuses, timings, dependencies, and policy markers remain enabled. You can manually enable payload logging at **APIs → All APIs → Settings → Diagnostics Logs** in the portal for troubleshooting, but the next provisioning run restores the global code-defined zero-byte settings. Payloads can contain sensitive Azure DevOps content or credentials; the OBO exchange itself contains a client secret and tokens. Restrict telemetry access and handle any captured credentials as exposed. Response-body logging can buffer responses and disrupt MCP streaming; disable manual payload logging after diagnosis.
+
+**Existing deployments with the old MCP override:** incremental provisioning does not delete resources removed from Bicep. Delete only the old Azure DevOps API-level Application Insights diagnostic once, so the API inherits **All APIs**. This does not delete the MCP API, global diagnostic, or Application Insights resource:
+
+```bash
+az rest --method delete \
+  --url "https://management.azure.com/subscriptions/<subscription-id>/resourceGroups/<resource-group>/providers/Microsoft.ApiManagement/service/<apim-name>/apis/azure-devops-mcp/diagnostics/applicationinsights?api-version=2024-05-01"
+```
+
+Skip this cleanup for new deployments. After removing the override, configure any temporary payload logging at **All APIs**, not on the MCP server.
 
 To update an existing deployment, pull `main` and run `azd provision` using your existing environment. Function code has not changed, so `azd up` is not required. Restart the APIM MCP connection after provisioning, then allow several minutes for telemetry ingestion.
 

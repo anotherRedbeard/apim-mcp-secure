@@ -95,7 +95,6 @@ module monitoring './modules/monitoring.bicep' = {
     tags: tags
     apimName: apim.outputs.apimName
     apimPrincipalId: apim.outputs.apimPrincipalId
-    azureDevOpsMcpApiName: apimApis.outputs.azureDevOpsMcpApiName
   }
 }
 

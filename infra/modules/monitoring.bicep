@@ -3,7 +3,6 @@ param resourceToken string
 param tags object
 param apimName string
 param apimPrincipalId string
-param azureDevOpsMcpApiName string
 
 @minValue(0)
 @maxValue(8192)
@@ -77,36 +76,6 @@ var messageDiagnostics = {
 
 resource diagnostics 'Microsoft.ApiManagement/service/diagnostics@2024-05-01' = {
   parent: apim
-  name: 'applicationinsights'
-  properties: {
-    loggerId: logger.id
-    alwaysLog: 'allErrors'
-    sampling: {
-      samplingType: 'fixed'
-      percentage: 100
-    }
-    verbosity: 'information'
-    httpCorrelationProtocol: 'W3C'
-    logClientIp: false
-    operationNameFormat: 'Name'
-    frontend: {
-      request: messageDiagnostics
-      response: messageDiagnostics
-    }
-    backend: {
-      request: messageDiagnostics
-      response: messageDiagnostics
-    }
-  }
-}
-
-resource azureDevOpsMcpApi 'Microsoft.ApiManagement/service/apis@2025-09-01-preview' existing = {
-  parent: apim
-  name: azureDevOpsMcpApiName
-}
-
-resource azureDevOpsDiagnostics 'Microsoft.ApiManagement/service/apis/diagnostics@2024-05-01' = {
-  parent: azureDevOpsMcpApi
   name: 'applicationinsights'
   properties: {
     loggerId: logger.id

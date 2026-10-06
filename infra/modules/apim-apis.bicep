@@ -272,5 +272,3 @@ resource azureDevOpsMcpServerApiPolicy 'Microsoft.ApiManagement/service/apis/pol
     apimGatewayUrlNamedValue
   ]
 }
-
-output azureDevOpsMcpApiName string = azureDevOpsMcpServerApi.name
