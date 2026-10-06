@@ -185,6 +185,8 @@ This provisions all infrastructure (Function App, APIM, Storage) and deploys the
 
 The `azure-devops-mcp` pass-through preserves the hosted server's native tools, so adding a native Azure DevOps MCP tool does not require a separate Bicep operation. Use APIM's MCP server **Tools** configuration to curate the tools exposed to clients.
 
+If provisioning fails with `Cannot deserialize the current JSON array` at `mcpProperties.endpoints`, update to the latest template. The deployed APIM API expects an object keyed by endpoint name (`endpoints: { message: { uriTemplate: '/mcp' } }`), despite the preview Bicep schema and reference examples declaring an array. The template uses `any()` only for this mismatched MCP property schema so the emitted ARM JSON has the object shape required by the service.
+
 ### 5. Connect and try the demo
 
 Configure an MCP client to connect to `https://<apim-name>.azure-api.net/azure-devops-mcp/mcp` using the APIM OAuth flow. The client token is for `MCP_CLIENT_AUDIENCE` and the `access_mcp` scope; APIM performs the separate OBO exchange for Azure DevOps MCP. If testing with the token helper, provide its output through the client's secure bearer-token input rather than saving it in source control. In agent mode, ask: **“List the projects in my Azure DevOps organization.”**

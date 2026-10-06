@@ -237,15 +237,15 @@ resource azureDevOpsMcpServerApi 'Microsoft.ApiManagement/service/apis@2025-09-0
       'https'
     ]
     serviceUrl: 'https://mcp.dev.azure.com/${azureDevOpsOrganizationName}'
-    mcpProperties: {
+    // The deployed API expects a dictionary; the preview Bicep schema still declares an array.
+    mcpProperties: any({
       transportType: 'streamable'
-      endpoints: [
-        {
-          name: 'message'
+      endpoints: {
+        message: {
           uriTemplate: '/mcp'
         }
-      ]
-    }
+      }
+    })
   }
 }
 
