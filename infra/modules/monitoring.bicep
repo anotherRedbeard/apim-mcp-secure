@@ -135,11 +135,12 @@ resource azureDevOpsDiagnostics 'Microsoft.ApiManagement/service/apis/diagnostic
       }
     }
 
-    output applicationInsightsName string = applicationInsights.name
-    output workspaceName string = workspace.name
     backend: {
       request: messageDiagnostics
       response: messageDiagnostics
     }
   }
+
+  output applicationInsightsName string = applicationInsights.name
+  output workspaceName string = workspace.name
 }
