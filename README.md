@@ -1,6 +1,6 @@
-# APIM MCP Secure — Azure Function App and Azure DevOps MCP with OBO Auth
+# APIM MCP Secure — Azure Function App, Azure DevOps and Fabric MCP with OBO Auth
 
-An Azure Function App with two HTTP endpoints, plus a pass-through to the hosted Azure DevOps MCP server, deployed behind Azure API Management (APIM). APIM advertises OAuth 2.0 Protected Resource Metadata (PRM) and uses On-Behalf-Of (OBO) token exchange so downstream calls run with the signed-in user's delegated permissions.
+An Azure Function App with two HTTP endpoints, plus pass-throughs to the hosted Azure DevOps and Fabric Core MCP servers, deployed behind Azure API Management (APIM). APIM advertises OAuth 2.0 Protected Resource Metadata (PRM) and uses On-Behalf-Of (OBO) token exchange so downstream calls run with the signed-in user's delegated permissions.
 
 ## Architecture
 
@@ -16,6 +16,8 @@ MCP Client
 │    └── GET /me → OBO exchange → Graph token     │
 │  azure-devops-mcp API                           │
 │    └── /mcp → OBO exchange → Azure DevOps MCP   │
+│  fabric-mcp API                                 │
+│    └── /mcp → OBO exchange → Fabric Core MCP    │
 │                                                 │
 │  mcp-auth API                                   │
 │    └── /.well-known/oauth-protected-resource    │
@@ -30,6 +32,8 @@ MCP Client
 ```
 
 APIM links the Azure DevOps MCP API to the `azure-devops-mcp-backend` resource using `backendId`. The backend's exact endpoint is `https://mcp.dev.azure.com/{organization}` (no `/mcp` suffix). The public APIM endpoint remains `/azure-devops-mcp/mcp`.
+
+The Fabric API uses the same external MCP pattern, linking to `fabric-mcp-backend` at the exact endpoint `https://api.fabric.microsoft.com/v1/mcp/core`. Its public APIM endpoint is `/fabric-mcp/mcp`. Both preserve the native toolset without defining individual REST operations or synthetic MCP tools.
 
 ### Auth Flow (GetMe)
 
@@ -48,9 +52,19 @@ APIM links the Azure DevOps MCP API to the `azure-devops-mcp-backend` resource u
 
 The user must have access to the Azure DevOps organization and projects. The delegated app permission limits what the client application can request; Azure DevOps still enforces the signed-in user's own permissions.
 
+### Auth Flow (Fabric Core MCP pass-through)
+
+1. The MCP client requests the existing backend API's `access_mcp` scope and calls `/fabric-mcp/mcp`.
+2. APIM validates the inbound token against the configured API URI or backend app client ID.
+3. APIM exchanges that token using the same OBO app registration for `https://api.fabric.microsoft.com/.default`.
+4. APIM forwards Streamable HTTP requests to `https://api.fabric.microsoft.com/v1/mcp/core` using the resulting delegated Fabric token.
+5. Fabric returns its native tools and enforces the signed-in user's workspace/item permissions for each call.
+
+The client-facing scope remains `access_mcp`; clients must not request Fabric tokens directly for the APIM endpoint. `.default` requests the Fabric delegated permissions already configured and consented on the OBO app; it does not grant permissions or consent by itself.
+
 ## Prerequisites
 
-The sample exposes the hosted Azure DevOps MCP server at `/azure-devops-mcp/mcp`. The existing Function App and Graph example remain in place.
+The sample exposes the hosted Azure DevOps MCP server at `/azure-devops-mcp/mcp` and Fabric Core MCP at `/fabric-mcp/mcp`. The existing Function App and Graph example remain in place.
 
 - [Azure Developer CLI (azd)](https://learn.microsoft.com/azure/developer/azure-developer-cli/install-azd)
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
@@ -58,10 +72,11 @@ The sample exposes the hosted Azure DevOps MCP server at `/azure-devops-mcp/mcp`
 - An Azure subscription and an Azure DevOps Services organization connected to Microsoft Entra ID
 - **2 Entra ID app registrations** (see setup steps below)
 - The **Azure DevOps MCP** enterprise application provisioned in the tenant (application ID `2a72489c-aab2-4b65-b93a-a91edccf33b8`)
+- For the Fabric demo, an active Fabric tenant in the configured Entra tenant and at least one workspace the signed-in user can access
 
 ## Entra ID App Registration Setup
 
-You need two app registrations: a **client app** (used by the MCP client) and a **backend API app** (defines the `access_mcp` scope and performs OBO to Microsoft Graph and Azure DevOps MCP).
+You need two app registrations: a **client app** (used by the MCP client) and a **backend API app** (defines the `access_mcp` scope and performs OBO to Microsoft Graph, Azure DevOps MCP and Fabric). The Fabric passthrough reuses these registrations; it needs no additional client secret.
 
 ### App 1 — Client App (MCP Client)
 
@@ -76,7 +91,7 @@ This is the public client your MCP client tool uses to sign users in and request
 
 ### App 2 — Backend API App (OBO Middle-Tier)
 
-This app defines the `access_mcp` scope that the client requests, and performs OBO exchanges for Microsoft Graph and Azure DevOps MCP on behalf of the user.
+This app defines the `access_mcp` scope that the client requests, and performs OBO exchanges for Microsoft Graph, Azure DevOps MCP and Fabric on behalf of the user.
 
 1. Register a new app (e.g., `mcp-backend-api`).
 2. Note the **Application (client) ID** → this becomes `OBO_CLIENT_ID`.
@@ -87,6 +102,7 @@ This app defines the `access_mcp` scope that the client requests, and performs O
 4. **API permissions:**
    - Add `Microsoft Graph → User.Read` (delegated).
    - Add the delegated permission(s) required by the Azure DevOps MCP remote server. Follow the procedure below to provision the enterprise application if needed and inspect the permissions it actually publishes.
+   - Add the Fabric delegated permissions described below if using the Fabric passthrough.
 5. **Certificates & secrets:** Create a new client secret → this becomes `OBO_CLIENT_SECRET`.
 
 ### Provision the Azure DevOps MCP enterprise application and grant permission
@@ -140,6 +156,36 @@ Reference: [Microsoft's remote Azure DevOps MCP setup](https://learn.microsoft.c
 
 For the demo, the downstream MCP tool is `core_list_projects`. The signed-in user's Azure DevOps organization membership and project permissions still determine which project data the request can return; OAuth delegated consent does not grant the user additional Azure DevOps access.
 
+### Configure Fabric delegated permissions
+
+These are manual Entra configuration steps, not changes performed by `azd provision`:
+
+1. Open the existing **backend API / OBO app** (App 2), then **API permissions → Add a permission → Power BI Service → Delegated permissions**. Fabric API scopes are published under Power BI Service.
+2. Configure permissions for the native tools you intend to use:
+
+   | Tool category | Delegated permission |
+   |---|---|
+   | Workspace listing, management, roles and folders | `Workspace.ReadWrite.All` |
+   | Item management and item definitions | `Item.ReadWrite.All` |
+   | Capacity listing | `Capacity.Read.All` |
+   | OneLake catalog search | `Catalog.Read.All` |
+
+   For a first workspace-listing test, `Workspace.Read.All` is sufficient instead of `Workspace.ReadWrite.All`. The passthrough still publishes the native toolset; tools lacking consented scopes or user permissions will fail rather than gain additional access. Review each operation's **Required Delegated Scopes** in the [Fabric REST reference](https://learn.microsoft.com/rest/api/fabric/) as the upstream toolset evolves.
+3. Grant the required consent before connecting. OBO cannot display a downstream consent prompt, so resolve missing Fabric consent on App 2 first.
+4. Keep the existing `access_mcp` scope and client authorization unchanged. No Fabric delegated permissions need to be added to the MCP client registration.
+
+The named value `fabric-mcp-scope` defaults to `https://api.fabric.microsoft.com/.default`, verified against the [Fabric connection documentation](https://learn.microsoft.com/rest/api/fabric/articles/mcp-servers/core-remote/get-started-core) and the live [protected-resource metadata](https://api.fabric.microsoft.com/.well-known/oauth-protected-resource/v1/mcp/core). No new azd environment variable is required.
+
+All native tools are exposed, including destructive workspace/item operations and permission changes. Fabric RBAC and delegated scopes remain the authorization boundaries; use client approval controls before allowing writes. The first demo should be **"List all my Fabric workspaces"**, which invokes `list_workspaces`.
+
+### Claude connector without a client secret
+
+Use a dedicated public-client registration with the existing backend API's delegated `access_mcp` permission. Register `https://claude.ai/api/mcp/auth_callback` under **Mobile and desktop applications**, not **Web** or **Single-page application**. Enter that registration's client ID in Claude and leave the client secret blank. Claude uses Authorization Code with S256 PKCE. This configuration was confirmed working for the Azure DevOps passthrough; validate connection and refresh separately for the Fabric connector.
+
+For Claude to connect to Fabric through APIM, add the exact **public APIM Fabric URL** (`https://<apim-name>.azure-api.net/fabric-mcp/mcp`) to App 2's **Application ID URIs**, retaining its existing API URI and Azure DevOps URL. Use v2 access tokens (`api.requestedAccessTokenVersion: 2`); the policy already accepts the backend app's GUID audience. Follow Entra's [identifier URI restrictions](https://learn.microsoft.com/entra/identity-platform/identifier-uri-restrictions) if your tenant rejects the URL; do not use the upstream Fabric URL as App 2's identifier.
+
+Leaving the client secret blank does not make a **Web** redirect a public client. Do not change the working VS Code or confidential-client registration; use the dedicated Claude public client. The separate backend OBO secret remains necessary in this sample.
+
 ## Quick Start
 
 ### 1. Authenticate with Azure
@@ -191,6 +237,21 @@ If the portal shows the Azure DevOps server's source as **API** rather than an e
 
 Configure an MCP client to connect to `https://<apim-name>.azure-api.net/azure-devops-mcp/mcp` using the APIM OAuth flow. The client token is for `MCP_CLIENT_AUDIENCE` and the `access_mcp` scope; APIM performs the separate OBO exchange for Azure DevOps MCP. If testing with the token helper, provide its output through the client's secure bearer-token input rather than saving it in source control. In agent mode, ask: **“List the projects in my Azure DevOps organization.”**
 
+For Fabric, complete the [Fabric delegated permission setup](#configure-fabric-delegated-permissions), then connect to `https://<apim-name>.azure-api.net/fabric-mcp/mcp` using the same APIM OAuth flow. The URL is also exported as `AZURE_APIM_FABRIC_MCP_URL`. In VS Code, add this server alongside your existing servers:
+
+```json
+{
+  "servers": {
+    "fabric-apim": {
+      "type": "http",
+      "url": "https://<apim-name>.azure-api.net/fabric-mcp/mcp"
+    }
+  }
+}
+```
+
+For Claude, use the [secretless public-client configuration](#claude-connector-without-a-client-secret) above. Ask **"List all my Fabric workspaces"** and confirm the result matches the signed-in user's accessible workspaces. Test MCP initialization, tool discovery, a read-only tool call, and token refresh before treating the deployment as end-to-end verified. A successful template build or OBO response alone is not sufficient.
+
 ## Local Development
 
 ```bash
@@ -217,7 +278,7 @@ The Function App runs locally at `http://localhost:7071`:
 │   └── policies/
 │       ├── mcp-auth-policy.xml     # PRM metadata response
 │       ├── obo-getme-policy.xml    # OBO token exchange for Graph
-│       └── obo-azdo-mcp-policy.xml # OBO token exchange for Azure DevOps MCP
+│       └── obo-remote-mcp-policy.xml # Shared OBO policy for Azure DevOps and Fabric MCP
 └── src/
     └── FunctionApp/
         ├── Functions/
@@ -235,14 +296,15 @@ The Function App runs locally at `http://localhost:7071`:
 | `obo-client-secret` | `OBO_CLIENT_SECRET` | Backend app (App 2) client secret — used for OBO token exchange | Yes |
 | `mcp-client-audience` | `MCP_CLIENT_AUDIENCE` | Audience APIM validates incoming tokens against — set to `api://<OBO_CLIENT_ID>` | No |
 | `azdo-mcp-scope` | `AZDO_MCP_SCOPE` | `https://mcp.dev.azure.com/.default`, advertised by the hosted MCP server and requested during OBO | No |
+| `fabric-mcp-scope` | Bicep `fabricMcpScope` default | `https://api.fabric.microsoft.com/.default`, advertised by Fabric Core MCP and requested during OBO | No |
 
 ## APIM observability
 
-Both MCP authentication policies accept the configured `mcp-client-audience` and the backend app's GUID from the existing `obo-client-id` named value. This supports the configured API URI audience and the GUID audience used by Entra v2 access tokens without hardcoding an application ID. Keep `MCP_CLIENT_AUDIENCE` set to the API URI if you need both forms accepted.
+All MCP authentication policies accept the configured `mcp-client-audience` and the backend app's GUID from the existing `obo-client-id` named value. This supports the configured API URI audience and the GUID audience used by Entra v2 access tokens without hardcoding an application ID. Keep `MCP_CLIENT_AUDIENCE` set to the API URI if you need both forms accepted.
 
 Deployment creates workspace-backed Application Insights (`appi-<resourceToken>`) and a Log Analytics workspace (`log-<resourceToken>`) with 30-day workspace retention. APIM uses its system-assigned managed identity with the Monitoring Metrics Publisher role on Application Insights. The deploying identity must be allowed to create role assignments at that scope. No new environment variables are required.
 
-Application Insights logging is enabled at **All APIs** with 100% sampling for this diagnostic sample, including OAuth metadata requests and failed requests. No headers are selected for logging, and client IP logging is disabled. The Azure DevOps policy emits markers for inbound processing, the OBO token endpoint's HTTP status, and policy errors; those markers do not log tokens, secrets, or token response bodies. This instruments APIM, not the Function App's internal code.
+Application Insights logging is enabled at **All APIs** with 100% sampling for this diagnostic sample, including OAuth metadata requests and failed requests. No headers are selected for logging, and client IP logging is disabled. The shared remote MCP policy emits separate `azdo-mcp` and `fabric-mcp` markers for inbound processing, the OBO token endpoint's HTTP status, and policy errors; those markers do not log tokens, secrets, or token response bodies. Neither passthrough creates an API-level logging override. This instruments APIM, not the Function App's internal code.
 
 **Payload logging is disabled by default:** **Number of payload bytes to log** is **0** for frontend and backend requests and responses at **All APIs**. The template does not create API-specific diagnostic overrides; MCP APIs inherit the global configuration. Request statuses, timings, dependencies, and policy markers remain enabled. You can manually enable payload logging at **APIs → All APIs → Settings → Diagnostics Logs** in the portal for troubleshooting, but the next provisioning run restores the global code-defined zero-byte settings. Payloads can contain sensitive Azure DevOps content or credentials; the OBO exchange itself contains a client secret and tokens. Restrict telemetry access and handle any captured credentials as exposed. Response-body logging can buffer responses and disrupt MCP streaming; disable manual payload logging after diagnosis.
 
@@ -262,12 +324,14 @@ In the resource group's **Application Insights** resource, open **Logs** and run
 ```kusto
 requests
 | where timestamp > ago(30m)
-| where url contains "/azure-devops-mcp" or url contains "/.well-known/oauth-protected-resource"
+| where url contains "/azure-devops-mcp" or url contains "/fabric-mcp" or url contains "/.well-known/oauth-protected-resource"
 | project timestamp, name, url, resultCode, success, duration, operation_Id
 | order by timestamp desc
 ```
 
 Seeing `/azure-devops-mcp/mcp` confirms the client request reached APIM; a metadata request alone does not confirm an MCP request. Copy an `operation_Id` from the request and correlate policy markers and outgoing dependencies:
+
+For Fabric, look for `/fabric-mcp/mcp`, `fabric-mcp` policy markers and a backend dependency to `api.fabric.microsoft.com`.
 
 ```kusto
 union withsource=TelemetryTable requests, dependencies, traces
@@ -286,6 +350,7 @@ Telemetry ingestion incurs Azure Monitor charges. Reduce the sampling percentage
 - Client secrets are stored as APIM secret named values (consider Key Vault-backed named values for production)
 - The OBO exchange ensures the Function App only receives Graph tokens, never the original client token
 - The Azure DevOps pass-through forwards the user's OBO token to the hosted MCP endpoint; it does not use a shared service identity or PAT.
+- The Fabric pass-through likewise forwards a delegated OBO token, not an app-only or managed identity token. Fabric still enforces the user's permissions; full native tools include destructive actions.
 - The pass-through exposes the hosted server's full native toolset. Restrict the published MCP tools and add APIM access controls/rate limits before exposing it broadly; the sample MCP APIs do not require APIM subscription keys.
 - APIM's external MCP pass-through supports tools and resources, but not upstream MCP prompts; the project-listing demo uses a tool.
 - MCP streaming can be disrupted if APIM diagnostic settings log response bodies. The template disables payload logging; restore any manual diagnostic overrides to zero for normal operation.

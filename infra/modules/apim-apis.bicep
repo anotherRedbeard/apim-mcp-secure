@@ -13,6 +13,8 @@ param azureDevOpsOrganizationName string
 @description('MCP API path served via APIM')
 param mcpApiPath string = 'obo-mcp-server'
 
+var remoteMcpPolicy = loadTextContent('../policies/obo-remote-mcp-policy.xml')
+
 resource apim 'Microsoft.ApiManagement/service@2024-06-01-preview' existing = {
   name: apimName
 }
@@ -266,7 +268,54 @@ resource azureDevOpsMcpServerApiPolicy 'Microsoft.ApiManagement/service/apis/pol
   name: 'policy'
   properties: {
     format: 'rawxml'
-    value: loadTextContent('../policies/obo-azdo-mcp-policy.xml')
+    value: replace(replace(replace(remoteMcpPolicy, '__MCP_TRACE_SOURCE__', 'azdo-mcp'), '__MCP_DISPLAY_NAME__', 'Azure DevOps MCP'), '{{remote-mcp-scope}}', '{{azdo-mcp-scope}}')
+  }
+  dependsOn: [
+    apimGatewayUrlNamedValue
+  ]
+}
+
+resource fabricMcpBackend 'Microsoft.ApiManagement/service/backends@2025-09-01-preview' = {
+  parent: apim
+  name: 'fabric-mcp-backend'
+  properties: {
+    protocol: 'http'
+    url: 'https://api.fabric.microsoft.com/v1/mcp/core'
+    tls: {
+      validateCertificateChain: true
+      validateCertificateName: true
+    }
+    type: 'Single'
+  }
+}
+
+resource fabricMcpServerApi 'Microsoft.ApiManagement/service/apis@2025-09-01-preview' = {
+  parent: apim
+  name: 'fabric-mcp'
+  properties: {
+    displayName: 'Fabric Core MCP'
+    description: 'Pass-through to the Fabric Core MCP server, preserving its native toolset'
+    type: 'mcp'
+    subscriptionRequired: false
+    path: 'fabric-mcp/mcp'
+    protocols: [
+      'https'
+    ]
+    backendId: fabricMcpBackend.name
+    serviceUrl: ''
+    mcpProperties: any({
+      transportType: 'streamable'
+      endpoints: {}
+    })
+  }
+}
+
+resource fabricMcpServerApiPolicy 'Microsoft.ApiManagement/service/apis/policies@2025-09-01-preview' = {
+  parent: fabricMcpServerApi
+  name: 'policy'
+  properties: {
+    format: 'rawxml'
+    value: replace(replace(replace(remoteMcpPolicy, '__MCP_TRACE_SOURCE__', 'fabric-mcp'), '__MCP_DISPLAY_NAME__', 'Fabric Core MCP'), '{{remote-mcp-scope}}', '{{fabric-mcp-scope}}')
   }
   dependsOn: [
     apimGatewayUrlNamedValue

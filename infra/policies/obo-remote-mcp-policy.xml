@@ -1,7 +1,7 @@
 <policies>
     <inbound>
-        <trace source="azdo-mcp" severity="information">
-            <message>Azure DevOps MCP request reached APIM inbound policy</message>
+        <trace source="__MCP_TRACE_SOURCE__" severity="information">
+            <message>__MCP_DISPLAY_NAME__ request reached APIM inbound policy</message>
             <metadata name="requestId" value="@(context.RequestId.ToString())" />
         </trace>
         <base />
@@ -18,7 +18,7 @@
                     $&quot;&amp;client_secret={System.Uri.EscapeDataString(&quot;{{obo-client-secret}}&quot;)}&quot; +
                     $&quot;&amp;grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&quot; +
                     $&quot;&amp;requested_token_use=on_behalf_of&quot; +
-                    $&quot;&amp;scope={System.Uri.EscapeDataString(&quot;{{azdo-mcp-scope}}&quot;)}&quot; +
+                    $&quot;&amp;scope={System.Uri.EscapeDataString(&quot;{{remote-mcp-scope}}&quot;)}&quot; +
                     $&quot;&amp;assertion={System.Uri.EscapeDataString((string)context.Variables[&quot;incoming_access_token&quot;])}&quot;;
                 return form;
             }" />
@@ -38,8 +38,8 @@
                 </return-response>
             </when>
         </choose>
-        <trace source="azdo-mcp" severity="information">
-            <message>Azure DevOps MCP OBO token endpoint responded</message>
+        <trace source="__MCP_TRACE_SOURCE__" severity="information">
+            <message>__MCP_DISPLAY_NAME__ OBO token endpoint responded</message>
             <metadata name="statusCode" value="@(((IResponse)context.Variables[&quot;obo_token_resp&quot;]).StatusCode.ToString())" />
         </trace>
         <set-variable name="obo_json" value="@{
@@ -66,8 +66,8 @@
         <base />
     </outbound>
     <on-error>
-        <trace source="azdo-mcp" severity="error">
-            <message>Azure DevOps MCP policy processing failed</message>
+        <trace source="__MCP_TRACE_SOURCE__" severity="error">
+            <message>__MCP_DISPLAY_NAME__ policy processing failed</message>
             <metadata name="source" value="@(context.LastError.Source)" />
             <metadata name="reason" value="@(context.LastError.Reason)" />
         </trace>

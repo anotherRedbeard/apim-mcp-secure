@@ -28,6 +28,9 @@ param mcpClientAudience string
 @description('Fully qualified delegated scope for the Azure DevOps MCP backend')
 param azureDevOpsMcpScope string
 
+@description('Fully qualified delegated scope for the Fabric Core MCP backend')
+param fabricMcpScope string
+
 @secure()
 @description('Client secret for OBO app registration')
 param oboClientSecret string
@@ -98,6 +101,16 @@ resource namedValueAzureDevOpsMcpScope 'Microsoft.ApiManagement/service/namedVal
   properties: {
     displayName: 'azdo-mcp-scope'
     value: azureDevOpsMcpScope
+    secret: false
+  }
+}
+
+resource namedValueFabricMcpScope 'Microsoft.ApiManagement/service/namedValues@2024-06-01-preview' = {
+  parent: apim
+  name: 'fabric-mcp-scope'
+  properties: {
+    displayName: 'fabric-mcp-scope'
+    value: fabricMcpScope
     secret: false
   }
 }
