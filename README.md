@@ -39,7 +39,7 @@ The Fabric API uses the same external MCP pattern, linking to `fabric-mcp-backen
 
 1. MCP client authenticates with Entra ID → gets token with `access_mcp` scope
 2. Client calls APIM with `Authorization: Bearer <token>`
-3. APIM validates the JWT and performs OBO exchange (swaps `access_mcp` token for `User.Read` Graph token)
+3. APIM validates the JWT and performs OBO exchange (swaps `access_mcp` token for `User.Read` Graph token), authenticating the backend app with a federated managed-identity assertion
 4. APIM forwards request to Function App with the Graph token in the `Authorization` header
 5. Function App's GetMe endpoint calls Microsoft Graph `/me` and returns the user profile
 
@@ -76,7 +76,7 @@ The sample exposes the hosted Azure DevOps MCP server at `/azure-devops-mcp/mcp`
 
 ## Entra ID App Registration Setup
 
-You need two app registrations: a **client app** (used by the MCP client) and a **backend API app** (defines the `access_mcp` scope and performs OBO to Microsoft Graph, Azure DevOps MCP and Fabric). The Fabric passthrough reuses these registrations; it needs no additional client secret.
+You need two app registrations: a **client app** (used by the MCP client) and a **backend API app** (defines the `access_mcp` scope and performs OBO to Microsoft Graph, Azure DevOps MCP and Fabric). All OBO policies authenticate the backend app using a user-assigned managed identity as a federated credential; no OBO client secret is required.
 
 ### App 1 — Client App (MCP Client)
 
@@ -103,7 +103,30 @@ This app defines the `access_mcp` scope that the client requests, and performs O
    - Add `Microsoft Graph → User.Read` (delegated).
    - Add the delegated permission(s) required by the Azure DevOps MCP remote server. Follow the procedure below to provision the enterprise application if needed and inspect the permissions it actually publishes.
    - Add the Fabric delegated permissions described below if using the Fabric passthrough.
-5. **Certificates & secrets:** Create a new client secret → this becomes `OBO_CLIENT_SECRET`.
+5. After provisioning, configure the **federated credential** described below instead of creating a client secret.
+
+### Federated credential for APIM's OBO identity
+
+Bicep creates `id-obo-<resourceToken>` and attaches it to APIM as a **user-assigned managed identity**. APIM keeps its existing system-assigned identity for Application Insights. The user-assigned identity and App 2 must belong to the same Entra tenant.
+
+After provisioning, open **App 2 → Certificates & secrets → Federated credentials → Add credential**. Select the **Managed identity** scenario and choose the newly created user-assigned identity. If configuring the fields manually, use:
+
+| Field | Value |
+|---|---|
+| Issuer | `https://login.microsoftonline.com/<ENTRAID_TENANT_ID>/v2.0` |
+| Subject | Identity's **principal/object ID**, exported as `AZURE_OBO_MANAGED_IDENTITY_PRINCIPAL_ID` |
+| Audience | `api://AzureADTokenExchange` |
+| Name | For example, `apim-obo-managed-identity` |
+
+The identity's **client ID**, exported as `AZURE_OBO_MANAGED_IDENTITY_CLIENT_ID`, goes into the APIM named value `obo-managed-identity-client-id`; it is **not** the federated credential's subject. The backend app's `OBO_CLIENT_ID` stays unchanged. The identity needs no downstream API permissions or Azure RBAC assignments for this exchange: delegated permissions and consent remain on App 2.
+
+Each OBO policy saves the incoming user token, obtains a managed-identity token for `api://AzureADTokenExchange`, and sends that credential as `client_assertion` with `client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`. The user token remains the separate `assertion`, with `requested_token_use=on_behalf_of`. Only the resulting delegated OBO token is forwarded downstream; the managed-identity token is not a replacement for the user's token. Managed-identity acquisition fails closed, and APIM caches the credential token until expiry.
+
+**Migration warning:** provisioning switches Graph, Azure DevOps and Fabric OBO policies immediately. OBO calls will fail until you create the matching federated credential and it propagates. Schedule this transition accordingly; clients, API URLs, audiences and delegated consent do not change. Bicep does not create or modify the app registration's federated credentials.
+
+After verifying all three OBO paths, revoke the old backend client secret and remove its unused `obo-client-secret` APIM named value, `OBO_CLIENT_SECRET` azd environment value and GitHub Actions secret. Incremental provisioning does not delete the old named value automatically. Do not revoke the old secret before verification if you need it for rollback to the previous policies.
+
+Reference: [Configure an application to trust a managed identity](https://learn.microsoft.com/entra/workload-id/workload-identity-federation-config-app-trust-managed-identity).
 
 ### Provision the Azure DevOps MCP enterprise application and grant permission
 
@@ -184,7 +207,7 @@ Use a dedicated public-client registration with the existing backend API's deleg
 
 For Claude to connect to Fabric through APIM, add the exact **public APIM Fabric URL** (`https://<apim-name>.azure-api.net/fabric-mcp/mcp`) to App 2's **Application ID URIs**, retaining its existing API URI and Azure DevOps URL. Use v2 access tokens (`api.requestedAccessTokenVersion: 2`); the policy already accepts the backend app's GUID audience. Follow Entra's [identifier URI restrictions](https://learn.microsoft.com/entra/identity-platform/identifier-uri-restrictions) if your tenant rejects the URL; do not use the upstream Fabric URL as App 2's identifier.
 
-Leaving the client secret blank does not make a **Web** redirect a public client. Do not change the working VS Code or confidential-client registration; use the dedicated Claude public client. The separate backend OBO secret remains necessary in this sample.
+Leaving the client secret blank does not make a **Web** redirect a public client. Do not change the working VS Code or confidential-client registration; use the dedicated Claude public client. Backend OBO authentication is separate and uses the federated managed identity described above.
 
 ## Quick Start
 
@@ -205,7 +228,6 @@ azd init
 ```bash
 azd env set ENTRAID_TENANT_ID <your-tenant-id>
 azd env set OBO_CLIENT_ID <app2-client-id>
-azd env set OBO_CLIENT_SECRET <app2-client-secret>
 azd env set MCP_CLIENT_AUDIENCE api://<app2-client-id>
 azd env set AZDO_ORGANIZATION <your-azure-devops-organization>
 azd env set AZDO_MCP_SCOPE 'https://mcp.dev.azure.com/.default'
@@ -227,7 +249,7 @@ For a manual test token, request App 2's `access_mcp` scope with the public clie
 azd up
 ```
 
-This provisions all infrastructure (Function App, APIM, Storage) and deploys the Function App code.
+This provisions all infrastructure (Function App, APIM, Storage and the OBO user-assigned managed identity) and deploys the Function App code. Before making OBO calls, complete the [federated credential setup](#federated-credential-for-apims-obo-identity) on App 2 using the new identity. The identity name, client ID and principal ID are exported to the azd environment; inspect them with `azd env get-values`.
 
 The `azure-devops-mcp` pass-through preserves the hosted server's native tools, so adding a native Azure DevOps MCP tool does not require a separate Bicep operation. Use APIM's MCP server **Tools** configuration to curate the tools exposed to clients.
 
@@ -293,7 +315,7 @@ The Function App runs locally at `http://localhost:7071`:
 |---|---|---|---|
 | `entraid-tenant` | `ENTRAID_TENANT_ID` | Entra ID tenant ID | No |
 | `obo-client-id` | `OBO_CLIENT_ID` | Backend app (App 2) client ID — used as the OBO actor | No |
-| `obo-client-secret` | `OBO_CLIENT_SECRET` | Backend app (App 2) client secret — used for OBO token exchange | Yes |
+| `obo-managed-identity-client-id` | Bicep-created identity | User-assigned identity client ID used to acquire the federated OBO credential | No |
 | `mcp-client-audience` | `MCP_CLIENT_AUDIENCE` | Audience APIM validates incoming tokens against — set to `api://<OBO_CLIENT_ID>` | No |
 | `azdo-mcp-scope` | `AZDO_MCP_SCOPE` | `https://mcp.dev.azure.com/.default`, advertised by the hosted MCP server and requested during OBO | No |
 | `fabric-mcp-scope` | Bicep `fabricMcpScope` default | `https://api.fabric.microsoft.com/.default`, advertised by Fabric Core MCP and requested during OBO | No |
@@ -306,7 +328,7 @@ Deployment creates workspace-backed Application Insights (`appi-<resourceToken>`
 
 Application Insights logging is enabled at **All APIs** with 100% sampling for this diagnostic sample, including OAuth metadata requests and failed requests. No headers are selected for logging, and client IP logging is disabled. The shared remote MCP policy emits separate `azdo-mcp` and `fabric-mcp` markers for inbound processing, the OBO token endpoint's HTTP status, and policy errors; those markers do not log tokens, secrets, or token response bodies. Neither passthrough creates an API-level logging override. This instruments APIM, not the Function App's internal code.
 
-**Payload logging is disabled by default:** **Number of payload bytes to log** is **0** for frontend and backend requests and responses at **All APIs**. The template does not create API-specific diagnostic overrides; MCP APIs inherit the global configuration. Request statuses, timings, dependencies, and policy markers remain enabled. You can manually enable payload logging at **APIs → All APIs → Settings → Diagnostics Logs** in the portal for troubleshooting, but the next provisioning run restores the global code-defined zero-byte settings. Payloads can contain sensitive Azure DevOps content or credentials; the OBO exchange itself contains a client secret and tokens. Restrict telemetry access and handle any captured credentials as exposed. Response-body logging can buffer responses and disrupt MCP streaming; disable manual payload logging after diagnosis.
+**Payload logging is disabled by default:** **Number of payload bytes to log** is **0** for frontend and backend requests and responses at **All APIs**. The template does not create API-specific diagnostic overrides; MCP APIs inherit the global configuration. Request statuses, timings, dependencies, and policy markers remain enabled. You can manually enable payload logging at **APIs → All APIs → Settings → Diagnostics Logs** in the portal for troubleshooting, but the next provisioning run restores the global code-defined zero-byte settings. Payloads can contain sensitive Azure DevOps content or credentials; the OBO exchange contains both user tokens and managed-identity credential tokens. Restrict telemetry access and handle any captured credentials as exposed. Response-body logging can buffer responses and disrupt MCP streaming; disable manual payload logging after diagnosis.
 
 **Existing deployments with the old MCP override:** incremental provisioning does not delete resources removed from Bicep. Delete only the old Azure DevOps API-level Application Insights diagnostic once, so the API inherits **All APIs**. This does not delete the MCP API, global diagnostic, or Application Insights resource:
 
@@ -347,7 +369,7 @@ Telemetry ingestion incurs Azure Monitor charges. Reduce the sampling percentage
 ## Security Notes
 
 - The Function App itself does not validate tokens — APIM acts as the auth gateway
-- Client secrets are stored as APIM secret named values (consider Key Vault-backed named values for production)
+- OBO uses a user-assigned managed identity federated to the backend app; no client secret is provisioned or sent. Restrict APIM policy-edit permissions because policy authors can use the attached identity to authenticate as the backend app.
 - The OBO exchange ensures the Function App only receives Graph tokens, never the original client token
 - The Azure DevOps pass-through forwards the user's OBO token to the hosted MCP endpoint; it does not use a shared service identity or PAT.
 - The Fabric pass-through likewise forwards a delegated OBO token, not an app-only or managed identity token. Fabric still enforces the user's permissions; full native tools include destructive actions.

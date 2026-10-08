@@ -12,10 +12,12 @@
             </audiences>
         </validate-azure-ad-token>
         <set-variable name="incoming_access_token" value="@(context.Request.Headers.GetValueOrDefault(&quot;Authorization&quot;, &quot;&quot;).Replace(&quot;Bearer &quot;, &quot;&quot;))" />
+        <authentication-managed-identity resource="api://AzureADTokenExchange" client-id="{{obo-managed-identity-client-id}}" output-token-variable-name="obo_client_assertion" ignore-error="false" />
         <set-variable name="obo_body" value="@{
                 var form =
                     $&quot;client_id={{obo-client-id}}&quot; +
-                    $&quot;&amp;client_secret={System.Uri.EscapeDataString(&quot;{{obo-client-secret}}&quot;)}&quot; +
+                    $&quot;&amp;client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer&quot; +
+                    $&quot;&amp;client_assertion={System.Uri.EscapeDataString((string)context.Variables[&quot;obo_client_assertion&quot;])}&quot; +
                     $&quot;&amp;grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&quot; +
                     $&quot;&amp;requested_token_use=on_behalf_of&quot; +
                     $&quot;&amp;scope={System.Uri.EscapeDataString(&quot;{{remote-mcp-scope}}&quot;)}&quot; +

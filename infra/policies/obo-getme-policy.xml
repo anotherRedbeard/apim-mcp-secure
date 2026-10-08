@@ -2,16 +2,18 @@
     <inbound>
         <base />
         <!-- 1) Extract the incoming user access token (the 'assertion' for OBO) -->
-        <set-variable name="incoming_access_token" value="@(context.Request.Headers.GetValueOrDefault("Authorization", "").Replace("Bearer ", ""))" />
+        <set-variable name="incoming_access_token" value="@(context.Request.Headers.GetValueOrDefault(&quot;Authorization&quot;, &quot;&quot;).Replace(&quot;Bearer &quot;, &quot;&quot;))" />
+        <authentication-managed-identity resource="api://AzureADTokenExchange" client-id="{{obo-managed-identity-client-id}}" output-token-variable-name="obo_client_assertion" ignore-error="false" />
         <!-- 2) Prepare OBO token request to Microsoft Entra ID -->
         <set-variable name="obo_body" value="@{
                 var form =
-                $"client_id={{obo-client-id}}" +
-                $"&amp;client_secret={System.Uri.EscapeDataString("{{obo-client-secret}}")}" +
-                $"&amp;grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer" +
-                $"&amp;requested_token_use=on_behalf_of" +
-                $"&amp;scope={System.Uri.EscapeDataString("User.Read")}" +
-                $"&amp;assertion={System.Uri.EscapeDataString((string)context.Variables["incoming_access_token"])}";
+                $&quot;client_id={{obo-client-id}}&quot; +
+                $&quot;&amp;client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer&quot; +
+                $&quot;&amp;client_assertion={System.Uri.EscapeDataString((string)context.Variables[&quot;obo_client_assertion&quot;])}&quot; +
+                $&quot;&amp;grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&quot; +
+                $&quot;&amp;requested_token_use=on_behalf_of&quot; +
+                $&quot;&amp;scope={System.Uri.EscapeDataString(&quot;User.Read&quot;)}&quot; +
+                $&quot;&amp;assertion={System.Uri.EscapeDataString((string)context.Variables[&quot;incoming_access_token&quot;])}&quot;;
                 return form;
             }" />
         <!-- 3) Exchange the token (OBO) -->
@@ -25,7 +27,7 @@
         </send-request>
         <!-- 4) Parse OBO response and fail fast on error -->
         <choose>
-            <when condition="@(!(context.Variables.ContainsKey("obo_token_resp")))">
+            <when condition="@(!(context.Variables.ContainsKey(&quot;obo_token_resp&quot;)))">
                 <return-response>
                     <set-status code="502" reason="Bad Gateway" />
                     <set-body>{"error":"token_exchange_failed","error_description":"No response from token endpoint"}</set-body>
@@ -33,11 +35,11 @@
             </when>
         </choose>
         <set-variable name="obo_json" value="@{
-                var resp = (IResponse)context.Variables["obo_token_resp"];
+                var resp = (IResponse)context.Variables[&quot;obo_token_resp&quot;];
                 return resp.Body.As&lt;JObject&gt;(preserveContent: true);
             }" />
         <choose>
-            <when condition="@(((JObject)context.Variables["obo_json"]).GetValue("access_token") == null)">
+            <when condition="@(((JObject)context.Variables[&quot;obo_json&quot;]).GetValue(&quot;access_token&quot;) == null)">
                 <return-response>
                     <set-status code="401" reason="Unauthorized" />
                     <set-body>@(((JObject)context.Variables["obo_json"]).ToString())</set-body>
@@ -45,7 +47,7 @@
             </when>
         </choose>
         <!-- 5) Set downstream Authorization header with the OBO token -->
-        <set-variable name="downstream_access_token" value="@(((JObject)context.Variables["obo_json"]).Value&lt;string&gt;("access_token"))" />
+        <set-variable name="downstream_access_token" value="@(((JObject)context.Variables[&quot;obo_json&quot;]).Value&lt;string&gt;(&quot;access_token&quot;))" />
         <set-header name="Authorization" exists-action="override">
             <value>@($"Bearer {context.Variables["downstream_access_token"]}")</value>
         </set-header>

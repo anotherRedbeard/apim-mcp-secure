@@ -14,9 +14,6 @@
     "oboClientId": {
       "value": "${OBO_CLIENT_ID}"
     },
-    "oboClientSecret": {
-      "value": "${OBO_CLIENT_SECRET}"
-    },
     "apimPublisherEmail": {
       "value": "${APIM_PUBLISHER_EMAIL}"
     },

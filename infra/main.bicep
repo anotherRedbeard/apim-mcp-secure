@@ -27,10 +27,6 @@ param azureDevOpsMcpScope string
 @description('Delegated scope advertised by the Fabric Core MCP server')
 param fabricMcpScope string = 'https://api.fabric.microsoft.com/.default'
 
-@secure()
-@description('Client secret of the middle-tier app registration (used for OBO)')
-param oboClientSecret string
-
 @description('APIM publisher email')
 param apimPublisherEmail string = 'admin@contoso.com'
 
@@ -75,7 +71,6 @@ module apim './modules/apim.bicep' = {
     mcpClientAudience: mcpClientAudience
     azureDevOpsMcpScope: azureDevOpsMcpScope
     fabricMcpScope: fabricMcpScope
-    oboClientSecret: oboClientSecret
   }
 }
 
@@ -111,3 +106,6 @@ output AZURE_APIM_NAME string = apim.outputs.apimName
 output AZURE_APIM_GATEWAY_URL string = apim.outputs.apimGatewayUrl
 output AZURE_APIM_AZDO_MCP_URL string = '${apim.outputs.apimGatewayUrl}/azure-devops-mcp/mcp'
 output AZURE_APIM_FABRIC_MCP_URL string = '${apim.outputs.apimGatewayUrl}/fabric-mcp/mcp'
+output AZURE_OBO_MANAGED_IDENTITY_NAME string = apim.outputs.oboManagedIdentityName
+output AZURE_OBO_MANAGED_IDENTITY_CLIENT_ID string = apim.outputs.oboManagedIdentityClientId
+output AZURE_OBO_MANAGED_IDENTITY_PRINCIPAL_ID string = apim.outputs.oboManagedIdentityPrincipalId

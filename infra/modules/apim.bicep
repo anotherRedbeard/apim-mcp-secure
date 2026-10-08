@@ -31,18 +31,23 @@ param azureDevOpsMcpScope string
 @description('Fully qualified delegated scope for the Fabric Core MCP backend')
 param fabricMcpScope string
 
-@secure()
-@description('Client secret for OBO app registration')
-param oboClientSecret string
-
 var apimName = '${abbrs.apiManagementService}${resourceToken}'
+
+resource oboIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${abbrs.managedIdentities}obo-${resourceToken}'
+  location: location
+  tags: tags
+}
 
 resource apim 'Microsoft.ApiManagement/service@2024-06-01-preview' = {
   name: apimName
   location: location
   tags: tags
   identity: {
-    type: 'SystemAssigned'
+    type: 'SystemAssigned, UserAssigned'
+    userAssignedIdentities: {
+      '${oboIdentity.id}': {}
+    }
   }
   sku: {
     name: 'Basicv2'
@@ -75,13 +80,13 @@ resource namedValueClientId 'Microsoft.ApiManagement/service/namedValues@2024-06
   }
 }
 
-resource namedValueClientSecret 'Microsoft.ApiManagement/service/namedValues@2024-06-01-preview' = {
+resource namedValueManagedIdentityClientId 'Microsoft.ApiManagement/service/namedValues@2024-06-01-preview' = {
   parent: apim
-  name: 'obo-client-secret'
+  name: 'obo-managed-identity-client-id'
   properties: {
-    displayName: 'obo-client-secret'
-    value: oboClientSecret
-    secret: true
+    displayName: 'obo-managed-identity-client-id'
+    value: oboIdentity.properties.clientId
+    secret: false
   }
 }
 
@@ -118,3 +123,6 @@ resource namedValueFabricMcpScope 'Microsoft.ApiManagement/service/namedValues@2
 output apimName string = apim.name
 output apimGatewayUrl string = apim.properties.gatewayUrl
 output apimPrincipalId string = apim.identity.principalId
+output oboManagedIdentityName string = oboIdentity.name
+output oboManagedIdentityClientId string = oboIdentity.properties.clientId
+output oboManagedIdentityPrincipalId string = oboIdentity.properties.principalId
